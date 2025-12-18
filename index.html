@@ -118,6 +118,15 @@
                     </div>
                 </div>
                 
+                <div class="page-actions">
+                    <button id="export-json" class="btn-secondary">📤 Экспорт JSON</button>
+                    <label for="import-json" class="btn-secondary">
+                        📥 Импорт JSON
+                        <input type="file" id="import-json" accept=".json" style="display: none;">
+                    </label>
+                    <button id="import-excel" class="btn-secondary">📊 Импорт из Excel</button>
+                </div>
+                
                 <div class="filters">
                     <select id="filter-status">
                         <option value="all">Все статусы</option>
@@ -298,7 +307,12 @@
                     <h2>База позиций</h2>
                     <div class="actions">
                         <button id="new-item" class="btn-primary">➕ Новая позиция</button>
-                        <button id="import-excel" class="btn-secondary">📥 Импорт из Excel</button>
+                        <button id="export-items" class="btn-secondary">📤 Экспорт позиций</button>
+                        <label for="import-items" class="btn-secondary">
+                            📥 Импорт позиций
+                            <input type="file" id="import-items" accept=".json" style="display: none;">
+                        </label>
+                        <button id="reset-items" class="btn-danger">🔄 Сбросить к заводским</button>
                     </div>
                 </div>
                 
