@@ -1617,3 +1617,111 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
+// Дополнительные методы для работы с Service Worker
+class EstimatorApp {
+    // ... существующий код ...
+
+    async checkForUpdates() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                
+                // Проверяем обновления
+                await registration.update();
+                
+                // Если есть новая версия SW
+                if (registration.waiting) {
+                    this.showUpdateNotification();
+                }
+                
+            } catch (error) {
+                console.error('Ошибка проверки обновлений:', error);
+            }
+        }
+    }
+
+    showUpdateNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'update-notification';
+        notification.innerHTML = `
+            <div class="update-content">
+                <p>Доступна новая версия приложения!</p>
+                <div class="update-actions">
+                    <button id="update-now" class="btn-primary">Обновить сейчас</button>
+                    <button id="update-later" class="btn-secondary">Позже</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        document.getElementById('update-now').addEventListener('click', () => {
+            this.updateServiceWorker();
+            notification.remove();
+        });
+        
+        document.getElementById('update-later').addEventListener('click', () => {
+            notification.remove();
+        });
+    }
+
+    async updateServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            const registration = await navigator.serviceWorker.ready;
+            
+            // Сообщаем SW обновить себя
+            registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+            
+            // Перезагружаем страницу после обновления
+            location.reload();
+        }
+    }
+
+    async getCacheInfo() {
+        if ('serviceWorker' in navigator) {
+            try {
+                return new Promise((resolve) => {
+                    const channel = new MessageChannel();
+                    
+                    channel.port1.onmessage = (event) => {
+                        if (event.data.type === 'CACHE_INFO') {
+                            resolve(event.data.data);
+                        }
+                    };
+                    
+                    navigator.serviceWorker.controller?.postMessage(
+                        { type: 'GET_CACHE_INFO' },
+                        [channel.port2]
+                    );
+                });
+            } catch (error) {
+                console.error('Ошибка получения информации о кэше:', error);
+                return null;
+            }
+        }
+    }
+
+    async clearAppCache() {
+        if (confirm('Очистить кэш приложения? Это удалит все оффлайн-данные.')) {
+            try {
+                if ('serviceWorker' in navigator) {
+                    // Сообщаем SW очистить кэш
+                    navigator.serviceWorker.controller?.postMessage({ 
+                        type: 'CLEAR_CACHE' 
+                    });
+                    
+                    // Очищаем IndexedDB
+                    const db = await this.openDB();
+                    await db.close();
+                    indexedDB.deleteDatabase('EstimatorDB');
+                    
+                    this.showNotification('Кэш очищен', 'success');
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Ошибка очистки кэша:', error);
+                this.showNotification('Ошибка очистки кэша', 'error');
+            }
+        }
+    }
+}
