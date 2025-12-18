@@ -7,18 +7,249 @@ class EstimatorApp {
         this.estimates = [];
         this.templates = [];
         this.items = [];
+        this.categories = [];
+        this.companyData = null;
+        this.appSettings = null;
+        this.deferredPrompt = null;
         
         this.init();
     }
 
     async init() {
         // Инициализация
+        await this.initDatabaseWithFileData();
         await this.loadData();
         this.bindEvents();
-        this.setupIndexedDB();
         this.checkInstallPrompt();
         this.hideSplashScreen();
         this.updateStorageInfo();
+    }
+
+    async initDatabaseWithFileData() {
+        try {
+            // Загружаем данные из файлов
+            const [templatesData, itemsData, companyData, settingsData] = await Promise.all([
+                this.fetchJSON('/data/default-templates.json'),
+                this.fetchJSON('/data/default-items.json'),
+                this.fetchJSON('/data/company-info.json'),
+                this.fetchJSON('/data/settings.json')
+            ]);
+            
+            this.companyData = companyData;
+            this.appSettings = settingsData;
+            
+            // Инициализируем IndexedDB
+            const db = await this.openDB();
+            
+            // Проверяем, есть ли уже данные
+            const existingItems = await this.getAllFromStore(db, 'items');
+            const existingTemplates = await this.getAllFromStore(db, 'templates');
+            
+            // Если база пустая, загружаем данные из файлов
+            if (existingItems.length === 0 && itemsData) {
+                const itemsTransaction = db.transaction(['items'], 'readwrite');
+                const itemsStore = itemsTransaction.objectStore('items');
+                
+                // Сохраняем категории
+                if (itemsData.categories) {
+                    for (const category of itemsData.categories) {
+                        await itemsStore.put({
+                            ...category,
+                            type: 'category',
+                            createdAt: new Date().toISOString()
+                        });
+                    }
+                }
+                
+                // Сохраняем позиции
+                if (itemsData.items) {
+                    for (const item of itemsData.items) {
+                        await itemsStore.put({
+                            ...item,
+                            createdAt: new Date().toISOString(),
+                            isDefault: true,
+                            isActive: true
+                        });
+                    }
+                }
+            }
+            
+            if (existingTemplates.length === 0 && templatesData) {
+                const templatesTransaction = db.transaction(['templates'], 'readwrite');
+                const templatesStore = templatesTransaction.objectStore('templates');
+                
+                if (templatesData.templates) {
+                    for (const template of templatesData.templates) {
+                        await templatesStore.put({
+                            ...template,
+                            createdAt: new Date().toISOString(),
+                            isDefault: true
+                        });
+                    }
+                }
+            }
+            
+            console.log('База данных инициализирована из файлов');
+            
+        } catch (error) {
+            console.error('Ошибка инициализации базы данных:', error);
+            // Создаем минимальные данные
+            await this.createDefaultData();
+        }
+    }
+
+    async fetchJSON(url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.warn(`Не удалось загрузить ${url}:`, error);
+            return null;
+        }
+    }
+
+    async createDefaultData() {
+        try {
+            const db = await this.openDB();
+            
+            // Создаем дефолтные категории
+            const defaultCategories = [
+                { id: 'basic-materials', name: 'Основные материалы', description: 'Основные материалы для потолков', sortOrder: 1, type: 'category' },
+                { id: 'profiles', name: 'Профили и крепления', description: 'Профили, крепеж, вставки', sortOrder: 2, type: 'category' },
+                { id: 'electrical', name: 'Электромонтажные работы', description: 'Работы по электрике', sortOrder: 3, type: 'category' },
+                { id: 'additional', name: 'Дополнительные работы', description: 'Дополнительные услуги', sortOrder: 4, type: 'category' },
+                { id: 'cornices', name: 'Карнизы', description: 'Шторные и потолочные карнизы', sortOrder: 5, type: 'category' },
+                { id: 'complex', name: 'Сложные работы', description: 'Сложные и специальные работы', sortOrder: 6, type: 'category' }
+            ];
+            
+            // Создаем дефолтные позиции из вашего Excel файла
+            const defaultItems = [
+                { id: 'item-1', name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610, cost: 450, category: 'basic-materials', isActive: true },
+                { id: 'item-2', name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310, cost: 180, category: 'profiles', isActive: true },
+                { id: 'item-3', name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220, cost: 120, category: 'profiles', isActive: true },
+                { id: 'item-4', name: 'Монтаж закладных под световое оборудование, установка светильников', unit: 'шт.', price: 780, cost: 400, category: 'electrical', isActive: true },
+                { id: 'item-5', name: 'Монтаж закладных под сдвоенное световое оборудование, установка светильников', unit: 'шт.', price: 1350, cost: 700, category: 'electrical', isActive: true },
+                { id: 'item-6', name: 'Монтаж закладных под люстру', unit: 'шт.', price: 1100, cost: 550, category: 'electrical', isActive: true },
+                { id: 'item-7', name: 'Монтаж закладной и установка вентилятора', unit: 'шт.', price: 1300, cost: 650, category: 'electrical', isActive: true },
+                { id: 'item-8', name: 'Монтаж закладной под потолочный карниз', unit: 'м.п.', price: 650, cost: 300, category: 'cornices', isActive: true },
+                { id: 'item-9', name: 'Установка потолочного карниза', unit: 'м.п.', price: 270, cost: 120, category: 'cornices', isActive: true },
+                { id: 'item-10', name: 'Установка разделителей', unit: 'м.п.', price: 1700, cost: 800, category: 'additional', isActive: true },
+                { id: 'item-11', name: 'Монтаж закладных под встраиваемые шкафы', unit: 'м.п.', price: 1100, cost: 500, category: 'additional', isActive: true },
+                { id: 'item-12', name: 'Монтаж шторных карнизов (ПК-15) двухрядный', unit: 'м.п.', price: 4000, cost: 2000, category: 'cornices', isActive: true },
+                { id: 'item-13', name: 'Монтаж шторных карнизов (ПК-5) трехрядный', unit: 'м.п.', price: 4500, cost: 2200, category: 'cornices', isActive: true },
+                { id: 'item-14', name: 'Работы по керамической плитке/керамограниту', unit: 'м.п.', price: 400, cost: 200, category: 'complex', isActive: true },
+                { id: 'item-15', name: 'Установка вентиляционной решетки', unit: 'шт.', price: 600, cost: 250, category: 'additional', isActive: true },
+                { id: 'item-16', name: 'Монтаж "парящего" потолка, установка светодиодной ленты', unit: 'м.п.', price: 1600, cost: 800, category: 'complex', isActive: true },
+                { id: 'item-17', name: 'Монтаж потолка системы "EuroKRAAB"', unit: 'м.п.', price: 1600, cost: 800, category: 'complex', isActive: true },
+                { id: 'item-18', name: 'Монтаж световых линий, установка светодиодной ленты', unit: 'м.п.', price: 3400, cost: 1700, category: 'complex', isActive: true },
+                { id: 'item-19', name: 'Монтаж открытой ниши', unit: 'м.п.', price: 1200, cost: 600, category: 'complex', isActive: true },
+                { id: 'item-20', name: 'Монтаж ниши с поворотом полотна', unit: 'м.п.', price: 3000, cost: 1500, category: 'complex', isActive: true },
+                { id: 'item-21', name: 'Монтаж перехода уровня', unit: 'м.п.', price: 3700, cost: 1850, category: 'complex', isActive: true },
+                { id: 'item-22', name: 'Монтаж закладных под трековое освещение (встраиваемые) с установкой', unit: 'м.п.', price: 3400, cost: 1700, category: 'electrical', isActive: true },
+                { id: 'item-23', name: 'Монтаж закладных под трековое освещение (накладные) с установкой', unit: 'м.п.', price: 1100, cost: 550, category: 'electrical', isActive: true }
+            ];
+            
+            // Создаем дефолтные шаблоны
+            const defaultTemplates = [
+                {
+                    id: 'template-garpun',
+                    name: 'Гарпун (базовый)',
+                    description: 'Базовая смета для гарпунной системы',
+                    category: 'Потолки',
+                    system: 'garpun',
+                    items: [
+                        { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610 },
+                        { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310 },
+                        { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220 }
+                    ]
+                },
+                {
+                    id: 'template-garpun-plus',
+                    name: 'Гарпун +10%',
+                    description: 'Смета с повышенными ценами на 10%',
+                    category: 'Потолки',
+                    system: 'garpun',
+                    items: [
+                        { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 670 },
+                        { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 340 },
+                        { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 240 }
+                    ]
+                }
+            ];
+            
+            // Сохраняем категории
+            const categoriesTransaction = db.transaction(['items'], 'readwrite');
+            const categoriesStore = categoriesTransaction.objectStore('items');
+            for (const category of defaultCategories) {
+                await categoriesStore.put({
+                    ...category,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            // Сохраняем позиции
+            const itemsTransaction = db.transaction(['items'], 'readwrite');
+            const itemsStore = itemsTransaction.objectStore('items');
+            for (const item of defaultItems) {
+                await itemsStore.put({
+                    ...item,
+                    createdAt: new Date().toISOString(),
+                    isDefault: true,
+                    isActive: true
+                });
+            }
+            
+            // Сохраняем шаблоны
+            const templatesTransaction = db.transaction(['templates'], 'readwrite');
+            const templatesStore = templatesTransaction.objectStore('templates');
+            for (const template of defaultTemplates) {
+                await templatesStore.put({
+                    ...template,
+                    createdAt: new Date().toISOString(),
+                    isDefault: true
+                });
+            }
+            
+            // Дефолтные настройки компании
+            this.companyData = {
+                company: {
+                    name: 'PotolokForLife',
+                    fullName: 'Натяжные потолки на всю жизнь',
+                    address: 'Московская область, г. Пушкино',
+                    phone: '8(977)531-10-99',
+                    additionalPhone: '8(977)709-38-43',
+                    email: 'potolokforlife@yandex.ru'
+                },
+                payment: {
+                    defaultTerms: '1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.\n2. Окончательный расчет 50% в день завершения всех работ.\nОплата за материалы производится 100% до начала выполнения работ.',
+                    warranty: 'Гарантия 5 лет на материалы и работы'
+                }
+            };
+            
+            // Дефолтные настройки приложения
+            this.appSettings = {
+                app: {
+                    theme: 'light',
+                    currency: 'RUB',
+                    currencySymbol: '₽',
+                    dateFormat: 'DD.MM.YYYY'
+                },
+                estimates: {
+                    defaultStatus: 'draft',
+                    autoSave: true
+                },
+                prices: {
+                    defaultMarkup: 35,
+                    vatIncluded: false
+                }
+            };
+            
+            console.log('Созданы минимальные данные');
+            
+        } catch (error) {
+            console.error('Ошибка создания минимальных данных:', error);
+        }
     }
 
     bindEvents() {
@@ -26,7 +257,7 @@ class EstimatorApp {
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.navigateTo(e.target.dataset.page);
+                this.navigateTo(e.target.dataset.page || e.target.closest('.menu-item').dataset.page);
             });
         });
 
@@ -34,10 +265,13 @@ class EstimatorApp {
         document.getElementById('menu-toggle').addEventListener('click', () => this.toggleSidebar());
         document.getElementById('close-menu').addEventListener('click', () => this.toggleSidebar());
         document.getElementById('theme-toggle').addEventListener('click', () => this.toggleTheme());
+        document.getElementById('export-all').addEventListener('click', () => this.exportAllData());
 
         // Создание сметы
-        document.getElementById('new-estimate').addEventListener('click', () => this.navigateTo('create'));
-        document.getElementById('new-estimate').addEventListener('click', () => this.createNewEstimate());
+        document.getElementById('new-estimate').addEventListener('click', () => {
+            this.navigateTo('create');
+            this.createNewEstimate();
+        });
 
         // Сохранение сметы
         document.getElementById('save-estimate').addEventListener('click', () => this.saveEstimate());
@@ -51,12 +285,31 @@ class EstimatorApp {
         document.getElementById('preview-pdf').addEventListener('click', () => this.previewPDF());
 
         // Поиск и фильтры
-        document.getElementById('search-estimates').addEventListener('input', (e) => this.searchEstimates(e.target.value));
-        document.getElementById('filter-status').addEventListener('change', () => this.filterEstimates());
-        document.getElementById('sort-by').addEventListener('change', () => this.sortEstimates());
+        const searchInput = document.getElementById('search-estimates');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => this.searchEstimates(e.target.value));
+        }
+        
+        const filterStatus = document.getElementById('filter-status');
+        if (filterStatus) {
+            filterStatus.addEventListener('change', () => this.filterEstimates());
+        }
+        
+        const sortBy = document.getElementById('sort-by');
+        if (sortBy) {
+            sortBy.addEventListener('change', () => this.sortEstimates());
+        }
 
         // Синхронизация
         document.getElementById('sync-button').addEventListener('click', () => this.syncData());
+
+        // Экспорт/импорт
+        document.getElementById('export-json')?.addEventListener('click', () => this.exportDataToJSON());
+        document.getElementById('import-json')?.addEventListener('change', (e) => this.importDataFromJSON(e));
+        document.getElementById('export-items')?.addEventListener('click', () => this.exportItemsToJSON());
+        document.getElementById('import-items')?.addEventListener('change', (e) => this.importItemsFromJSON(e));
+        document.getElementById('reset-items')?.addEventListener('click', () => this.resetToFactoryDefaults());
+        document.getElementById('import-excel')?.addEventListener('click', () => this.showExcelImportModal());
 
         // Обработка изменений в таблице
         document.addEventListener('input', (e) => {
@@ -72,9 +325,44 @@ class EstimatorApp {
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             this.deferredPrompt = e;
-            document.getElementById('install-btn').style.display = 'block';
-            document.getElementById('install-btn').addEventListener('click', () => this.installApp());
+            const installBtn = document.getElementById('install-btn');
+            if (installBtn) {
+                installBtn.style.display = 'block';
+                installBtn.addEventListener('click', () => this.installApp());
+            }
         });
+
+        // Обработка онлайн/оффлайн статуса
+        window.addEventListener('online', () => this.updateOnlineStatus(true));
+        window.addEventListener('offline', () => this.updateOnlineStatus(false));
+    }
+
+    async loadData() {
+        try {
+            const db = await this.openDB();
+            
+            // Загружаем сметы
+            this.estimates = await this.getAllFromStore(db, 'estimates') || [];
+            
+            // Загружаем шаблоны
+            this.templates = await this.getAllFromStore(db, 'templates') || [];
+            
+            // Загружаем позиции и категории
+            const allItems = await this.getAllFromStore(db, 'items') || [];
+            this.items = allItems.filter(item => item.type !== 'category');
+            this.categories = allItems.filter(item => item.type === 'category');
+            
+            console.log('Данные загружены:', {
+                estimates: this.estimates.length,
+                templates: this.templates.length,
+                items: this.items.length,
+                categories: this.categories.length
+            });
+            
+        } catch (error) {
+            console.error('Ошибка загрузки данных:', error);
+            this.showNotification('Ошибка загрузки данных', 'error');
+        }
     }
 
     async navigateTo(page) {
@@ -99,7 +387,11 @@ class EstimatorApp {
         if (pageElement) {
             pageElement.classList.add('active');
             this.currentPage = page;
-            document.getElementById('current-page').textContent = pageElement.querySelector('h2').textContent;
+            
+            const title = pageElement.querySelector('h2');
+            if (title) {
+                document.getElementById('current-page').textContent = title.textContent;
+            }
             
             // Загружаем данные для страницы
             switch(page) {
@@ -112,13 +404,15 @@ class EstimatorApp {
                 case 'templates':
                     await this.loadTemplates();
                     break;
+                case 'items':
+                    await this.loadItemsManager();
+                    break;
             }
         }
     }
 
     toggleSidebar(force) {
         const sidebar = document.getElementById('sidebar');
-        const app = document.getElementById('app');
         
         if (force !== undefined) {
             this.isSidebarOpen = force;
@@ -127,7 +421,6 @@ class EstimatorApp {
         }
         
         sidebar.classList.toggle('active', this.isSidebarOpen);
-        app.classList.toggle('sidebar-open', this.isSidebarOpen);
     }
 
     toggleTheme() {
@@ -136,43 +429,10 @@ class EstimatorApp {
         document.getElementById('theme-toggle').textContent = isDark ? '☀️' : '🌙';
     }
 
-    async loadData() {
-        try {
-            // Загружаем данные из IndexedDB
-            const db = await this.openDB();
-            
-            // Загружаем сметы
-            this.estimates = await this.getAllFromStore(db, 'estimates') || [];
-            
-            // Загружаем шаблоны
-            this.templates = await this.getAllFromStore(db, 'templates') || [];
-            
-            // Загружаем позиции
-            this.items = await this.getAllFromStore(db, 'items') || [];
-            
-            // Если данных нет, создаем начальные
-            if (this.templates.length === 0) {
-                await this.createDefaultTemplates();
-            }
-            
-            if (this.items.length === 0) {
-                await this.createDefaultItems();
-            }
-            
-            console.log('Данные загружены:', {
-                estimates: this.estimates.length,
-                templates: this.templates.length,
-                items: this.items.length
-            });
-            
-        } catch (error) {
-            console.error('Ошибка загрузки данных:', error);
-            this.showNotification('Ошибка загрузки данных', 'error');
-        }
-    }
-
     async loadEstimates() {
         const listElement = document.getElementById('estimates-list');
+        
+        if (!listElement) return;
         
         if (this.estimates.length === 0) {
             listElement.innerHTML = `
@@ -191,8 +451,8 @@ class EstimatorApp {
         }
 
         // Фильтрация и сортировка
-        const filtered = this.filterEstimates();
-        const sorted = this.sortEstimates(filtered);
+        const filtered = this.filterEstimatesData();
+        const sorted = this.sortEstimatesData(filtered);
         
         // Генерация HTML
         listElement.innerHTML = sorted.map(estimate => this.renderEstimateCard(estimate)).join('');
@@ -208,6 +468,52 @@ class EstimatorApp {
         });
     }
 
+    filterEstimatesData() {
+        const filterStatus = document.getElementById('filter-status');
+        const status = filterStatus ? filterStatus.value : 'all';
+        
+        if (status === 'all') {
+            return this.estimates;
+        }
+        
+        return this.estimates.filter(estimate => estimate.status === status);
+    }
+
+    sortEstimatesData(estimates) {
+        const sortBy = document.getElementById('sort-by');
+        const sortValue = sortBy ? sortBy.value : 'date-desc';
+        
+        return [...estimates].sort((a, b) => {
+            switch(sortValue) {
+                case 'date-asc':
+                    return new Date(a.date) - new Date(b.date);
+                case 'name':
+                    return a.name.localeCompare(b.name);
+                case 'amount':
+                    return (b.total || 0) - (a.total || 0);
+                case 'date-desc':
+                default:
+                    return new Date(b.date) - new Date(a.date);
+            }
+        });
+    }
+
+    searchEstimates(query) {
+        const listElement = document.getElementById('estimates-list');
+        if (!listElement || !query.trim()) {
+            this.loadEstimates();
+            return;
+        }
+        
+        const filtered = this.estimates.filter(estimate => 
+            estimate.name.toLowerCase().includes(query.toLowerCase()) ||
+            estimate.object.toLowerCase().includes(query.toLowerCase()) ||
+            estimate.address.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        listElement.innerHTML = filtered.map(estimate => this.renderEstimateCard(estimate)).join('');
+    }
+
     renderEstimateCard(estimate) {
         const date = new Date(estimate.date).toLocaleDateString('ru-RU');
         const statusText = {
@@ -216,6 +522,8 @@ class EstimatorApp {
             'accepted': 'Принято',
             'completed': 'Завершено'
         }[estimate.status] || 'Черновик';
+        
+        const total = estimate.total || 0;
         
         return `
             <div class="estimate-card" data-id="${estimate.id}">
@@ -235,7 +543,7 @@ class EstimatorApp {
                         <span>Периметр: ${estimate.perimeter || 0} м</span>
                     </div>
                     <div class="estimate-total">
-                        <strong>${estimate.total.toLocaleString('ru-RU')} руб.</strong>
+                        <strong>${total.toLocaleString('ru-RU')} руб.</strong>
                     </div>
                 </div>
                 <div class="estimate-footer">
@@ -266,7 +574,9 @@ class EstimatorApp {
             notes: '',
             total: 0,
             discount: 0,
-            finalTotal: 0
+            finalTotal: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
 
         document.getElementById('edit-title').textContent = 'Новая смета';
@@ -274,20 +584,28 @@ class EstimatorApp {
     }
 
     setupEstimateForm() {
-        if (!this.currentEstimate) return;
+        if (!this.currentEstimate) {
+            this.createNewEstimate();
+            return;
+        }
 
         // Заполняем форму
-        document.getElementById('estimate-name').value = this.currentEstimate.name;
-        document.getElementById('estimate-object').value = this.currentEstimate.object;
-        document.getElementById('estimate-address').value = this.currentEstimate.address;
-        document.getElementById('estimate-rooms').value = this.currentEstimate.rooms;
-        document.getElementById('estimate-status').value = this.currentEstimate.status;
-        document.getElementById('estimate-date').value = this.currentEstimate.date;
-        document.getElementById('area-s').value = this.currentEstimate.area;
-        document.getElementById('perimeter-p').value = this.currentEstimate.perimeter;
-        document.getElementById('height-h').value = this.currentEstimate.height;
-        document.getElementById('estimate-notes').value = this.currentEstimate.notes;
-        document.getElementById('discount').value = this.currentEstimate.discount || 0;
+        const setValue = (id, value) => {
+            const element = document.getElementById(id);
+            if (element) element.value = value || '';
+        };
+
+        setValue('estimate-name', this.currentEstimate.name);
+        setValue('estimate-object', this.currentEstimate.object);
+        setValue('estimate-address', this.currentEstimate.address);
+        setValue('estimate-rooms', this.currentEstimate.rooms);
+        setValue('estimate-status', this.currentEstimate.status);
+        setValue('estimate-date', this.currentEstimate.date);
+        setValue('area-s', this.currentEstimate.area);
+        setValue('perimeter-p', this.currentEstimate.perimeter);
+        setValue('height-h', this.currentEstimate.height);
+        setValue('estimate-notes', this.currentEstimate.notes);
+        setValue('discount', this.currentEstimate.discount || 0);
 
         // Заполняем таблицу позиций
         this.renderItemsTable();
@@ -296,6 +614,7 @@ class EstimatorApp {
 
     renderItemsTable() {
         const tbody = document.getElementById('items-tbody');
+        if (!tbody) return;
         
         if (!this.currentEstimate.items || this.currentEstimate.items.length === 0) {
             tbody.innerHTML = `
@@ -334,7 +653,7 @@ class EstimatorApp {
                     <input type="number" class="item-price" value="${item.price}" step="0.01" min="0"
                            onchange="app.updateItemField('${item.id}', 'price', parseFloat(this.value))">
                 </td>
-                <td class="item-total">${(item.quantity * item.price).toFixed(2)}</td>
+                <td class="item-total">${((item.quantity || 0) * (item.price || 0)).toFixed(2)}</td>
                 <td>
                     <button class="icon-button" onclick="app.removeItem('${item.id}', event)">🗑️</button>
                 </td>
@@ -343,10 +662,12 @@ class EstimatorApp {
     }
 
     updateItemField(itemId, field, value) {
+        if (!this.currentEstimate || !this.currentEstimate.items) return;
+        
         const item = this.currentEstimate.items.find(i => i.id === itemId);
         if (item) {
             item[field] = value;
-            item.total = item.quantity * item.price;
+            item.total = (item.quantity || 0) * (item.price || 0);
             
             // Обновляем отображение
             const row = document.querySelector(`[data-id="${itemId}"]`);
@@ -358,21 +679,49 @@ class EstimatorApp {
         }
     }
 
+    updateItemTotal(input) {
+        const row = input.closest('tr');
+        if (!row) return;
+        
+        const qtyInput = row.querySelector('.item-qty');
+        const priceInput = row.querySelector('.item-price');
+        const totalCell = row.querySelector('.item-total');
+        
+        if (qtyInput && priceInput && totalCell) {
+            const qty = parseFloat(qtyInput.value) || 0;
+            const price = parseFloat(priceInput.value) || 0;
+            const total = qty * price;
+            totalCell.textContent = total.toFixed(2);
+            
+            // Обновляем данные
+            const itemId = row.dataset.id;
+            if (itemId) {
+                this.updateItemField(itemId, 'quantity', qty);
+                this.updateItemField(itemId, 'price', price);
+            }
+        }
+    }
+
     async saveEstimate() {
         if (!this.currentEstimate) return;
 
         // Собираем данные из формы
-        this.currentEstimate.name = document.getElementById('estimate-name').value;
-        this.currentEstimate.object = document.getElementById('estimate-object').value;
-        this.currentEstimate.address = document.getElementById('estimate-address').value;
-        this.currentEstimate.rooms = parseInt(document.getElementById('estimate-rooms').value) || 1;
-        this.currentEstimate.status = document.getElementById('estimate-status').value;
-        this.currentEstimate.date = document.getElementById('estimate-date').value;
-        this.currentEstimate.area = parseFloat(document.getElementById('area-s').value) || 0;
-        this.currentEstimate.perimeter = parseFloat(document.getElementById('perimeter-p').value) || 0;
-        this.currentEstimate.height = parseFloat(document.getElementById('height-h').value) || 0;
-        this.currentEstimate.notes = document.getElementById('estimate-notes').value;
-        this.currentEstimate.discount = parseFloat(document.getElementById('discount').value) || 0;
+        const getValue = (id) => {
+            const element = document.getElementById(id);
+            return element ? element.value : '';
+        };
+
+        this.currentEstimate.name = getValue('estimate-name');
+        this.currentEstimate.object = getValue('estimate-object');
+        this.currentEstimate.address = getValue('estimate-address');
+        this.currentEstimate.rooms = parseInt(getValue('estimate-rooms')) || 1;
+        this.currentEstimate.status = getValue('estimate-status');
+        this.currentEstimate.date = getValue('estimate-date');
+        this.currentEstimate.area = parseFloat(getValue('area-s')) || 0;
+        this.currentEstimate.perimeter = parseFloat(getValue('perimeter-p')) || 0;
+        this.currentEstimate.height = parseFloat(getValue('height-h')) || 0;
+        this.currentEstimate.notes = getValue('estimate-notes');
+        this.currentEstimate.discount = parseFloat(getValue('discount')) || 0;
 
         // Обновляем итоги
         this.updateTotals();
@@ -383,6 +732,7 @@ class EstimatorApp {
             const transaction = db.transaction(['estimates'], 'readwrite');
             const store = transaction.objectStore('estimates');
             
+            this.currentEstimate.updatedAt = new Date().toISOString();
             await store.put(this.currentEstimate);
             
             // Обновляем локальный список
@@ -402,6 +752,30 @@ class EstimatorApp {
             console.error('Ошибка сохранения:', error);
             this.showNotification('Ошибка сохранения', 'error');
         }
+    }
+
+    updateTotals() {
+        if (!this.currentEstimate) return;
+        
+        const items = this.currentEstimate.items || [];
+        const subtotal = items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
+        const discount = parseFloat(document.getElementById('discount')?.value) || 0;
+        const discountAmount = subtotal * (discount / 100);
+        const total = subtotal - discountAmount;
+        
+        // Обновляем отображение
+        const totalElement = document.getElementById('total-amount');
+        const discountElement = document.getElementById('discount-amount');
+        const finalElement = document.getElementById('final-amount');
+        
+        if (totalElement) totalElement.textContent = subtotal.toFixed(2);
+        if (discountElement) discountElement.textContent = discountAmount.toFixed(2);
+        if (finalElement) finalElement.textContent = total.toFixed(2);
+        
+        // Обновляем объект сметы
+        this.currentEstimate.total = subtotal;
+        this.currentEstimate.discount = discount;
+        this.currentEstimate.finalTotal = total;
     }
 
     async editEstimate(estimateId) {
@@ -429,7 +803,7 @@ class EstimatorApp {
     }
 
     async deleteEstimate(estimateId, event) {
-        event.stopPropagation();
+        if (event) event.stopPropagation();
         
         if (!confirm('Удалить эту смету?')) return;
         
@@ -455,7 +829,7 @@ class EstimatorApp {
     }
 
     async duplicateEstimate(estimateId, event) {
-        event.stopPropagation();
+        if (event) event.stopPropagation();
         
         try {
             const db = await this.openDB();
@@ -470,7 +844,9 @@ class EstimatorApp {
                     id: this.generateId(),
                     name: `Копия: ${original.name}`,
                     date: new Date().toISOString().split('T')[0],
-                    status: 'draft'
+                    status: 'draft',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
                 };
                 
                 // Удаляем старый id из items
@@ -491,30 +867,36 @@ class EstimatorApp {
         }
     }
 
-    updateTotals() {
-        if (!this.currentEstimate) return;
+    async exportEstimatePDF(estimateId, event) {
+        if (event) event.stopPropagation();
         
-        const items = this.currentEstimate.items || [];
-        const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-        const discount = parseFloat(document.getElementById('discount').value) || 0;
-        const discountAmount = subtotal * (discount / 100);
-        const total = subtotal - discountAmount;
-        
-        // Обновляем отображение
-        document.getElementById('total-amount').textContent = subtotal.toFixed(2);
-        document.getElementById('discount-amount').textContent = discountAmount.toFixed(2);
-        document.getElementById('final-amount').textContent = total.toFixed(2);
-        
-        // Обновляем объект сметы
-        if (this.currentEstimate) {
-            this.currentEstimate.total = subtotal;
-            this.currentEstimate.discount = discount;
-            this.currentEstimate.finalTotal = total;
+        try {
+            const db = await this.openDB();
+            const transaction = db.transaction(['estimates'], 'readonly');
+            const store = transaction.objectStore('estimates');
+            const request = store.get(estimateId);
+            
+            request.onsuccess = async () => {
+                const estimate = request.result;
+                const { generateEstimatePDF } = await import('./pdf-generator.js');
+                const pdf = await generateEstimatePDF(estimate, this.companyData);
+                
+                const fileName = `Смета_${estimate.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+                pdf.save(fileName);
+                
+                this.showNotification('PDF скачан', 'success');
+            };
+            
+        } catch (error) {
+            console.error('Ошибка экспорта:', error);
+            this.showNotification('Ошибка экспорта', 'error');
         }
     }
 
     showAddItemModal() {
         const modal = document.getElementById('add-item-modal');
+        if (!modal) return;
+        
         modal.querySelector('.modal-body').innerHTML = `
             <form id="add-item-form">
                 <div class="form-group">
@@ -540,7 +922,9 @@ class EstimatorApp {
                 </div>
                 <div class="form-group">
                     <label>Категория</label>
-                    <input type="text" id="item-category" placeholder="Например: Основные работы">
+                    <select id="item-category">
+                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary modal-close">Отмена</button>
@@ -589,34 +973,6 @@ class EstimatorApp {
         this.updateTotals();
         this.hideModal('add-item-modal');
         this.showNotification('Позиция добавлена', 'success');
-        
-        // Сохраняем в базу позиций
-        this.saveToItemsDatabase(newItem);
-    }
-
-    async saveToItemsDatabase(item) {
-        try {
-            const db = await this.openDB();
-            const transaction = db.transaction(['items'], 'readwrite');
-            const store = transaction.objectStore('items');
-            
-            // Проверяем, есть ли уже такая позиция
-            const request = store.index('name').get(item.name);
-            
-            request.onsuccess = () => {
-                if (!request.result) {
-                    // Сохраняем только если такой позиции еще нет
-                    store.put({
-                        ...item,
-                        isTemplate: true,
-                        createdAt: new Date().toISOString()
-                    });
-                }
-            };
-            
-        } catch (error) {
-            console.error('Ошибка сохранения позиции:', error);
-        }
     }
 
     removeItem(itemId, event) {
@@ -637,11 +993,10 @@ class EstimatorApp {
         }
         
         try {
-            // Импортируем PDF генератор
             const { generateEstimatePDF } = await import('./pdf-generator.js');
             
             // Генерируем PDF
-            const pdf = await generateEstimatePDF(this.currentEstimate);
+            const pdf = await generateEstimatePDF(this.currentEstimate, this.companyData);
             
             // Скачиваем файл
             const fileName = `Смета_${this.currentEstimate.name}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -663,42 +1018,17 @@ class EstimatorApp {
         
         try {
             const { generateEstimateHTML } = await import('./pdf-generator.js');
-            const html = generateEstimateHTML(this.currentEstimate);
+            const html = generateEstimateHTML(this.currentEstimate, this.companyData);
             
             const previewContent = document.getElementById('pdf-preview-content');
-            previewContent.innerHTML = html;
-            
-            this.showModal('pdf-preview-modal');
+            if (previewContent) {
+                previewContent.innerHTML = html;
+                this.showModal('pdf-preview-modal');
+            }
             
         } catch (error) {
             console.error('Ошибка предпросмотра:', error);
             this.showNotification('Ошибка предпросмотра', 'error');
-        }
-    }
-
-    async exportEstimatePDF(estimateId, event) {
-        if (event) event.stopPropagation();
-        
-        try {
-            const db = await this.openDB();
-            const transaction = db.transaction(['estimates'], 'readonly');
-            const store = transaction.objectStore('estimates');
-            const request = store.get(estimateId);
-            
-            request.onsuccess = async () => {
-                const estimate = request.result;
-                const { generateEstimatePDF } = await import('./pdf-generator.js');
-                const pdf = await generateEstimatePDF(estimate);
-                
-                const fileName = `Смета_${estimate.name}_${new Date().toISOString().split('T')[0]}.pdf`;
-                pdf.save(fileName);
-                
-                this.showNotification('PDF скачан', 'success');
-            };
-            
-        } catch (error) {
-            console.error('Ошибка экспорта:', error);
-            this.showNotification('Ошибка экспорта', 'error');
         }
     }
 
@@ -709,10 +1039,12 @@ class EstimatorApp {
 
     showNotification(message, type = 'info') {
         const notifications = document.getElementById('notifications');
+        if (!notifications) return;
+        
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.innerHTML = `
-            <span class="notification-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+            <span class="notification-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
             <span class="notification-text">${message}</span>
         `;
         
@@ -727,6 +1059,8 @@ class EstimatorApp {
     showModal(modalId) {
         const modal = document.getElementById(modalId);
         const overlay = document.getElementById('modal-overlay');
+        
+        if (!modal || !overlay) return;
         
         modal.style.display = 'block';
         overlay.style.display = 'block';
@@ -744,14 +1078,16 @@ class EstimatorApp {
         const modal = document.getElementById(modalId);
         const overlay = document.getElementById('modal-overlay');
         
-        modal.style.display = 'none';
-        overlay.style.display = 'none';
+        if (modal) modal.style.display = 'none';
+        if (overlay) overlay.style.display = 'none';
     }
 
     hideSplashScreen() {
         setTimeout(() => {
             const splash = document.getElementById('splash-screen');
             const app = document.getElementById('app');
+            
+            if (!splash || !app) return;
             
             splash.style.opacity = '0';
             splash.style.transition = 'opacity 0.5s ease';
@@ -783,7 +1119,6 @@ class EstimatorApp {
             const installBtn = document.getElementById('install-btn');
             if (installBtn) {
                 installBtn.style.display = 'block';
-                installBtn.addEventListener('click', () => this.installApp());
             }
         });
     }
@@ -810,9 +1145,13 @@ class EstimatorApp {
                     const totalMB = (estimate.quota / 1024 / 1024).toFixed(2);
                     const percentage = (estimate.usage / estimate.quota * 100).toFixed(0);
                     
-                    document.getElementById('storage-used').textContent = usedMB;
-                    document.getElementById('storage-total').textContent = totalMB;
-                    document.getElementById('storage-fill').style.width = `${percentage}%`;
+                    const storageUsed = document.getElementById('storage-used');
+                    const storageTotal = document.getElementById('storage-total');
+                    const storageFill = document.getElementById('storage-fill');
+                    
+                    if (storageUsed) storageUsed.textContent = usedMB;
+                    if (storageTotal) storageTotal.textContent = totalMB;
+                    if (storageFill) storageFill.style.width = `${percentage}%`;
                 });
         }
     }
@@ -821,7 +1160,6 @@ class EstimatorApp {
         this.showNotification('Синхронизация...', 'info');
         
         try {
-            // Регистрируем синхронизацию
             if ('serviceWorker' in navigator && 'sync' in navigator.serviceWorker.ready) {
                 const registration = await navigator.serviceWorker.ready;
                 await registration.sync.register('sync-data');
@@ -835,35 +1173,54 @@ class EstimatorApp {
         }
     }
 
+    updateOnlineStatus(isOnline) {
+        if (isOnline) {
+            this.showNotification('Соединение восстановлено', 'success');
+        } else {
+            this.showNotification('Работаем в оффлайн режиме', 'warning');
+        }
+    }
+
     // IndexedDB методы
     openDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('EstimatorDB', 1);
+            const request = indexedDB.open('EstimatorDB', 2);
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => resolve(request.result);
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
+                const oldVersion = event.oldVersion;
                 
                 // Создаем хранилище для смет
                 if (!db.objectStoreNames.contains('estimates')) {
                     const store = db.createObjectStore('estimates', { keyPath: 'id' });
                     store.createIndex('date', 'date', { unique: false });
                     store.createIndex('status', 'status', { unique: false });
+                    store.createIndex('createdAt', 'createdAt', { unique: false });
                 }
                 
                 // Создаем хранилище для шаблонов
                 if (!db.objectStoreNames.contains('templates')) {
                     const store = db.createObjectStore('templates', { keyPath: 'id' });
                     store.createIndex('category', 'category', { unique: false });
+                    store.createIndex('createdAt', 'createdAt', { unique: false });
                 }
                 
-                // Создаем хранилище для позиций
+                // Создаем хранилище для позиций и категорий
                 if (!db.objectStoreNames.contains('items')) {
                     const store = db.createObjectStore('items', { keyPath: 'id' });
                     store.createIndex('name', 'name', { unique: false });
                     store.createIndex('category', 'category', { unique: false });
+                    store.createIndex('type', 'type', { unique: false });
+                    store.createIndex('isActive', 'isActive', { unique: false });
+                    store.createIndex('createdAt', 'createdAt', { unique: false });
+                }
+                
+                // Миграция с версии 1 на 2
+                if (oldVersion < 2) {
+                    // Добавляем новые индексы если нужно
                 }
             };
         });
@@ -880,79 +1237,363 @@ class EstimatorApp {
         });
     }
 
-    async createDefaultTemplates() {
-        const defaultTemplates = [
-            {
-                id: 'template-garpun',
-                name: 'Гарпун (базовый)',
-                category: 'Потолки',
-                items: [
-                    { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610 },
-                    { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310 },
-                    { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220 }
-                ]
-            },
-            {
-                id: 'template-garpun-plus',
-                name: 'Гарпун +10%',
-                category: 'Потолки',
-                items: [
-                    { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 670 },
-                    { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 340 },
-                    { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 240 }
-                ]
-            }
-        ];
-        
+    // Экспорт/импорт данных
+    async exportAllData() {
         try {
             const db = await this.openDB();
-            const transaction = db.transaction(['templates'], 'readwrite');
-            const store = transaction.objectStore('templates');
             
-            for (const template of defaultTemplates) {
-                await store.put(template);
-            }
+            // Экспорт всех данных
+            const [estimates, templates, items] = await Promise.all([
+                this.getAllFromStore(db, 'estimates'),
+                this.getAllFromStore(db, 'templates'),
+                this.getAllFromStore(db, 'items')
+            ]);
             
-            this.templates = defaultTemplates;
+            const allData = {
+                version: '1.0.0',
+                exportedAt: new Date().toISOString(),
+                estimates,
+                templates,
+                items
+            };
+            
+            const blob = new Blob(
+                [JSON.stringify(allData, null, 2)], 
+                { type: 'application/json' }
+            );
+            
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `estimator_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            
+            this.showNotification('Все данные экспортированы', 'success');
             
         } catch (error) {
-            console.error('Ошибка создания шаблонов:', error);
+            console.error('Ошибка экспорта данных:', error);
+            this.showNotification('Ошибка экспорта данных', 'error');
         }
     }
 
-    async createDefaultItems() {
-        const defaultItems = [
-            // Основные работы
-            { id: 'item-1', name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610, category: 'Основные работы' },
-            { id: 'item-2', name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310, category: 'Основные работы' },
-            { id: 'item-3', name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220, category: 'Основные работы' },
+    async exportDataToJSON() {
+        try {
+            const db = await this.openDB();
+            const estimates = await this.getAllFromStore(db, 'estimates');
             
-            // Электромонтажные работы
-            { id: 'item-4', name: 'Монтаж закладных под световое оборудование, установка светильников', unit: 'шт.', price: 780, category: 'Электромонтажные работы' },
-            { id: 'item-5', name: 'Монтаж закладных под сдвоенное световое оборудование, установка светильников', unit: 'шт.', price: 1350, category: 'Электромонтажные работы' },
-            { id: 'item-6', name: 'Монтаж закладных под люстру', unit: 'шт.', price: 1100, category: 'Электромонтажные работы' },
-            { id: 'item-7', name: 'Монтаж закладной и установка вентилятора', unit: 'шт.', price: 1300, category: 'Электромонтажные работы' },
+            const blob = new Blob(
+                [JSON.stringify(estimates, null, 2)], 
+                { type: 'application/json' }
+            );
             
-            // Дополнительные работы
-            { id: 'item-8', name: 'Монтаж закладной под потолочный карниз', unit: 'м.п.', price: 650, category: 'Дополнительные работы' },
-            { id: 'item-9', name: 'Установка потолочного карниза', unit: 'м.п.', price: 270, category: 'Дополнительные работы' },
-            { id: 'item-10', name: 'Установка разделителей', unit: 'м.п.', price: 1700, category: 'Дополнительные работы' }
-        ];
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `estimates_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            
+            this.showNotification('Сметы экспортированы', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка экспорта:', error);
+            this.showNotification('Ошибка экспорта', 'error');
+        }
+    }
+
+    async exportItemsToJSON() {
+        try {
+            const db = await this.openDB();
+            const items = await this.getAllFromStore(db, 'items');
+            
+            // Фильтруем только активные позиции (не категории)
+            const activeItems = items.filter(item => item.isActive !== false && item.type !== 'category');
+            
+            const blob = new Blob(
+                [JSON.stringify(activeItems, null, 2)], 
+                { type: 'application/json' }
+            );
+            
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `items_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            
+            this.showNotification('Позиции экспортированы', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка экспорта позиций:', error);
+            this.showNotification('Ошибка экспорта', 'error');
+        }
+    }
+
+    async importDataFromJSON(event) {
+        if (!confirm('Импортировать данные? Существующие сметы будут сохранены.')) {
+            return;
+        }
         
         try {
+            const file = event.target.files[0];
+            if (!file) {
+                this.showNotification('Файл не выбран', 'warning');
+                return;
+            }
+            
+            const text = await file.text();
+            const data = JSON.parse(text);
+            
+            if (!Array.isArray(data)) {
+                throw new Error('Некорректный формат данных');
+            }
+            
+            // Определяем тип данных
+            if (data.length > 0) {
+                const firstItem = data[0];
+                
+                if (firstItem.items && firstItem.name && firstItem.object) {
+                    // Это сметы
+                    await this.importEstimates(data);
+                    this.showNotification('Сметы импортированы', 'success');
+                } else if (firstItem.name && firstItem.unit && firstItem.price !== undefined) {
+                    // Это позиции
+                    await this.importItems(data);
+                    this.showNotification('Позиции импортированы', 'success');
+                } else {
+                    throw new Error('Неизвестный формат данных');
+                }
+            }
+            
+            // Перезагружаем данные
+            await this.loadData();
+            
+        } catch (error) {
+            console.error('Ошибка импорта:', error);
+            this.showNotification(`Ошибка импорта: ${error.message}`, 'error');
+        }
+    }
+
+    async importItemsFromJSON(event) {
+        if (!confirm('Импортировать позиции? Существующие данные будут сохранены.')) {
+            return;
+        }
+        
+        try {
+            await this.importDataFromJSON(event);
+        } catch (error) {
+            console.error('Ошибка импорта позиций:', error);
+        }
+    }
+
+    async importEstimates(estimates) {
+        const db = await this.openDB();
+        const transaction = db.transaction(['estimates'], 'readwrite');
+        const store = transaction.objectStore('estimates');
+        
+        for (const estimate of estimates) {
+            const newEstimate = {
+                ...estimate,
+                id: estimate.id || this.generateId(),
+                createdAt: estimate.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Обновляем ID для всех позиций в смете
+            if (newEstimate.items && Array.isArray(newEstimate.items)) {
+                newEstimate.items = newEstimate.items.map(item => ({
+                    ...item,
+                    id: item.id || this.generateId()
+                }));
+            }
+            
+            await store.put(newEstimate);
+        }
+        
+        this.estimates = await this.getAllFromStore(db, 'estimates');
+    }
+
+    async importItems(items) {
+        const db = await this.openDB();
+        const transaction = db.transaction(['items'], 'readwrite');
+        const store = transaction.objectStore('items');
+        
+        for (const item of items) {
+            const newItem = {
+                ...item,
+                id: item.id || this.generateId(),
+                type: item.type || 'item',
+                isActive: item.isActive !== false,
+                createdAt: item.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            await store.put(newItem);
+        }
+        
+        this.items = await this.getAllFromStore(db, 'items');
+    }
+
+    async resetToFactoryDefaults() {
+        if (!confirm('Восстановить заводские настройки? Все ваши изменения в позициях будут потеряны.')) {
+            return;
+        }
+        
+        try {
+            // Очищаем базу данных позиций
             const db = await this.openDB();
             const transaction = db.transaction(['items'], 'readwrite');
             const store = transaction.objectStore('items');
+            await store.clear();
             
-            for (const item of defaultItems) {
-                await store.put(item);
-            }
+            // Создаем новые данные
+            await this.createDefaultData();
             
-            this.items = defaultItems;
+            // Обновляем данные
+            await this.loadData();
+            
+            this.showNotification('Данные восстановлены к заводским', 'success');
             
         } catch (error) {
-            console.error('Ошибка создания позиций:', error);
+            console.error('Ошибка сброса:', error);
+            this.showNotification('Ошибка сброса данных', 'error');
         }
+    }
+
+    showExcelImportModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h3>Импорт из Excel</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Для импорта данных из Excel:</p>
+                <ol>
+                    <li>Откройте ваш Excel файл</li>
+                    <li>Сохраните как CSV (Файл → Сохранить как → CSV UTF-8)</li>
+                    <li>Загрузите CSV файл ниже:</li>
+                </ol>
+                
+                <div class="form-group">
+                    <label for="excel-file">Выберите CSV файл:</label>
+                    <input type="file" id="excel-file" accept=".csv">
+                </div>
+                
+                <div class="form-group">
+                    <label>Структура CSV:</label>
+                    <pre>Наименование;Ед.изм.;Цена;Категория;Описание</pre>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn-secondary modal-close">Отмена</button>
+                    <button id="process-excel" class="btn-primary">Импортировать</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        this.showModal(modal);
+        
+        modal.querySelector('.modal-close').addEventListener('click', () => {
+            modal.remove();
+            this.hideModal();
+        });
+        
+        document.getElementById('process-excel').addEventListener('click', () => {
+            this.processExcelImport();
+        });
+    }
+
+    async processExcelImport() {
+        const fileInput = document.getElementById('excel-file');
+        if (!fileInput || !fileInput.files.length) {
+            this.showNotification('Выберите файл', 'warning');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+            try {
+                const csvData = e.target.result;
+                const items = this.parseCSV(csvData);
+                
+                await this.importItems(items);
+                this.showNotification(`Импортировано ${items.length} позиций`, 'success');
+                
+                // Закрываем модальное окно
+                document.querySelector('.modal').remove();
+                document.getElementById('modal-overlay').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Ошибка обработки CSV:', error);
+                this.showNotification('Ошибка обработки файла', 'error');
+            }
+        };
+        
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        const items = [];
+        
+        // Пропускаем заголовок (первую строку)
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // Разделяем по точке с запятой (CSV формат Excel)
+            const parts = line.split(';');
+            
+            if (parts.length >= 3) {
+                const item = {
+                    id: this.generateId(),
+                    name: parts[0]?.trim() || '',
+                    unit: parts[1]?.trim() || 'шт.',
+                    price: parseFloat(parts[2]?.replace(',', '.') || 0),
+                    category: parts[3]?.trim() || 'Прочие',
+                    description: parts[4]?.trim() || '',
+                    type: 'item',
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                if (item.name && !isNaN(item.price) && item.price > 0) {
+                    items.push(item);
+                }
+            }
+        }
+        
+        return items;
+    }
+
+    async loadTemplates() {
+        // Загрузка шаблонов будет реализована позже
+        console.log('Загрузка шаблонов...');
+    }
+
+    async loadItemsManager() {
+        // Загрузка менеджера позиций будет реализована позже
+        console.log('Загрузка менеджера позиций...');
+    }
+
+    showTemplatesModal() {
+        // Модальное окно для выбора шаблонов будет реализовано позже
+        this.showNotification('Функция в разработке', 'info');
     }
 }
 
