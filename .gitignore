@@ -1,0 +1,14 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem
+*.p12
+*.key
+*.crt
+dist/
+build/
+package-lock.json
+yarn.lock
