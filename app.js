@@ -16,7 +16,7 @@ class EstimatorApp {
     }
 
     async init() {
-        // Инициализация
+        console.log('Инициализация приложения...');
         await this.initDatabaseWithFileData();
         await this.loadData();
         this.bindEvents();
@@ -27,228 +27,148 @@ class EstimatorApp {
 
     async initDatabaseWithFileData() {
         try {
-            // Загружаем данные из файлов
-            const [templatesData, itemsData, companyData, settingsData] = await Promise.all([
-                this.fetchJSON('/data/default-templates.json'),
-                this.fetchJSON('/data/default-items.json'),
-                this.fetchJSON('/data/company-info.json'),
-                this.fetchJSON('/data/settings.json')
-            ]);
+            console.log('Инициализация базы данных...');
             
-            this.companyData = companyData;
-            this.appSettings = settingsData;
+            // Пробуем загрузить данные из файлов
+            const urls = [
+                '/data/default-templates.json',
+                '/data/default-items.json', 
+                '/data/company-info.json',
+                '/data/settings.json'
+            ];
+            
+            const promises = urls.map(url => 
+                fetch(url)
+                    .then(r => r.ok ? r.json() : null)
+                    .catch(() => null)
+            );
+            
+            const [templatesData, itemsData, companyData, settingsData] = await Promise.all(promises);
+            
+            this.companyData = companyData || {
+                company: {
+                    name: 'PotolokForLife',
+                    fullName: 'Натяжные потолки на всю жизнь',
+                    address: 'Московская область, г. Пушкино',
+                    phone: '8(977)531-10-99',
+                    email: 'potolokforlife@yandex.ru'
+                }
+            };
+            
+            this.appSettings = settingsData || {
+                app: { theme: 'light', currency: 'RUB' }
+            };
             
             // Инициализируем IndexedDB
             const db = await this.openDB();
             
-            // Проверяем, есть ли уже данные
-            const existingItems = await this.getAllFromStore(db, 'items');
-            const existingTemplates = await this.getAllFromStore(db, 'templates');
+            // Проверяем существующие данные
+            const [existingItems, existingTemplates] = await Promise.all([
+                this.getAllFromStore(db, 'items'),
+                this.getAllFromStore(db, 'templates')
+            ]);
             
-            // Если база пустая, загружаем данные из файлов
-            if (existingItems.length === 0 && itemsData) {
-                const itemsTransaction = db.transaction(['items'], 'readwrite');
-                const itemsStore = itemsTransaction.objectStore('items');
-                
-                // Сохраняем категории
-                if (itemsData.categories) {
-                    for (const category of itemsData.categories) {
-                        await itemsStore.put({
-                            ...category,
-                            type: 'category',
-                            createdAt: new Date().toISOString()
-                        });
-                    }
-                }
-                
-                // Сохраняем позиции
-                if (itemsData.items) {
-                    for (const item of itemsData.items) {
-                        await itemsStore.put({
-                            ...item,
-                            createdAt: new Date().toISOString(),
-                            isDefault: true,
-                            isActive: true
-                        });
-                    }
+            // Если база пуста, создаем дефолтные данные
+            if (existingItems.length === 0) {
+                await this.createDefaultData(db);
+            }
+            
+            if (existingTemplates.length === 0 && templatesData?.templates) {
+                const transaction = db.transaction(['templates'], 'readwrite');
+                const store = transaction.objectStore('templates');
+                for (const template of templatesData.templates) {
+                    await store.put({
+                        ...template,
+                        createdAt: new Date().toISOString()
+                    });
                 }
             }
             
-            if (existingTemplates.length === 0 && templatesData) {
-                const templatesTransaction = db.transaction(['templates'], 'readwrite');
-                const templatesStore = templatesTransaction.objectStore('templates');
-                
-                if (templatesData.templates) {
-                    for (const template of templatesData.templates) {
-                        await templatesStore.put({
-                            ...template,
-                            createdAt: new Date().toISOString(),
-                            isDefault: true
-                        });
-                    }
-                }
-            }
-            
-            console.log('База данных инициализирована из файлов');
+            console.log('База данных инициализирована');
             
         } catch (error) {
-            console.error('Ошибка инициализации базы данных:', error);
+            console.error('Ошибка инициализации БД:', error);
             // Создаем минимальные данные
-            await this.createDefaultData();
-        }
-    }
-
-    async fetchJSON(url) {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return await response.json();
-        } catch (error) {
-            console.warn(`Не удалось загрузить ${url}:`, error);
-            return null;
-        }
-    }
-
-    async createDefaultData() {
-        try {
             const db = await this.openDB();
+            await this.createDefaultData(db);
+        }
+    }
+
+    async createDefaultData(db) {
+        try {
+            console.log('Создание дефолтных данных...');
             
-            // Создаем дефолтные категории
+            // Дефолтные категории
             const defaultCategories = [
-                { id: 'basic-materials', name: 'Основные материалы', description: 'Основные материалы для потолков', sortOrder: 1, type: 'category' },
-                { id: 'profiles', name: 'Профили и крепления', description: 'Профили, крепеж, вставки', sortOrder: 2, type: 'category' },
-                { id: 'electrical', name: 'Электромонтажные работы', description: 'Работы по электрике', sortOrder: 3, type: 'category' },
-                { id: 'additional', name: 'Дополнительные работы', description: 'Дополнительные услуги', sortOrder: 4, type: 'category' },
-                { id: 'cornices', name: 'Карнизы', description: 'Шторные и потолочные карнизы', sortOrder: 5, type: 'category' },
-                { id: 'complex', name: 'Сложные работы', description: 'Сложные и специальные работы', sortOrder: 6, type: 'category' }
+                { id: 'basic-materials', name: 'Основные материалы', sortOrder: 1, type: 'category' },
+                { id: 'profiles', name: 'Профили и крепления', sortOrder: 2, type: 'category' },
+                { id: 'electrical', name: 'Электромонтажные работы', sortOrder: 3, type: 'category' },
+                { id: 'additional', name: 'Дополнительные работы', sortOrder: 4, type: 'category' },
+                { id: 'cornices', name: 'Карнизы', sortOrder: 5, type: 'category' },
+                { id: 'complex', name: 'Сложные работы', sortOrder: 6, type: 'category' }
             ];
             
-            // Создаем дефолтные позиции из вашего Excel файла
+            // Дефолтные позиции
             const defaultItems = [
-                { id: 'item-1', name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610, cost: 450, category: 'basic-materials', isActive: true },
-                { id: 'item-2', name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310, cost: 180, category: 'profiles', isActive: true },
-                { id: 'item-3', name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220, cost: 120, category: 'profiles', isActive: true },
-                { id: 'item-4', name: 'Монтаж закладных под световое оборудование, установка светильников', unit: 'шт.', price: 780, cost: 400, category: 'electrical', isActive: true },
-                { id: 'item-5', name: 'Монтаж закладных под сдвоенное световое оборудование, установка светильников', unit: 'шт.', price: 1350, cost: 700, category: 'electrical', isActive: true },
-                { id: 'item-6', name: 'Монтаж закладных под люстру', unit: 'шт.', price: 1100, cost: 550, category: 'electrical', isActive: true },
-                { id: 'item-7', name: 'Монтаж закладной и установка вентилятора', unit: 'шт.', price: 1300, cost: 650, category: 'electrical', isActive: true },
-                { id: 'item-8', name: 'Монтаж закладной под потолочный карниз', unit: 'м.п.', price: 650, cost: 300, category: 'cornices', isActive: true },
-                { id: 'item-9', name: 'Установка потолочного карниза', unit: 'м.п.', price: 270, cost: 120, category: 'cornices', isActive: true },
-                { id: 'item-10', name: 'Установка разделителей', unit: 'м.п.', price: 1700, cost: 800, category: 'additional', isActive: true },
-                { id: 'item-11', name: 'Монтаж закладных под встраиваемые шкафы', unit: 'м.п.', price: 1100, cost: 500, category: 'additional', isActive: true },
-                { id: 'item-12', name: 'Монтаж шторных карнизов (ПК-15) двухрядный', unit: 'м.п.', price: 4000, cost: 2000, category: 'cornices', isActive: true },
-                { id: 'item-13', name: 'Монтаж шторных карнизов (ПК-5) трехрядный', unit: 'м.п.', price: 4500, cost: 2200, category: 'cornices', isActive: true },
-                { id: 'item-14', name: 'Работы по керамической плитке/керамограниту', unit: 'м.п.', price: 400, cost: 200, category: 'complex', isActive: true },
-                { id: 'item-15', name: 'Установка вентиляционной решетки', unit: 'шт.', price: 600, cost: 250, category: 'additional', isActive: true },
-                { id: 'item-16', name: 'Монтаж "парящего" потолка, установка светодиодной ленты', unit: 'м.п.', price: 1600, cost: 800, category: 'complex', isActive: true },
-                { id: 'item-17', name: 'Монтаж потолка системы "EuroKRAAB"', unit: 'м.п.', price: 1600, cost: 800, category: 'complex', isActive: true },
-                { id: 'item-18', name: 'Монтаж световых линий, установка светодиодной ленты', unit: 'м.п.', price: 3400, cost: 1700, category: 'complex', isActive: true },
-                { id: 'item-19', name: 'Монтаж открытой ниши', unit: 'м.п.', price: 1200, cost: 600, category: 'complex', isActive: true },
-                { id: 'item-20', name: 'Монтаж ниши с поворотом полотна', unit: 'м.п.', price: 3000, cost: 1500, category: 'complex', isActive: true },
-                { id: 'item-21', name: 'Монтаж перехода уровня', unit: 'м.п.', price: 3700, cost: 1850, category: 'complex', isActive: true },
-                { id: 'item-22', name: 'Монтаж закладных под трековое освещение (встраиваемые) с установкой', unit: 'м.п.', price: 3400, cost: 1700, category: 'electrical', isActive: true },
-                { id: 'item-23', name: 'Монтаж закладных под трековое освещение (накладные) с установкой', unit: 'м.п.', price: 1100, cost: 550, category: 'electrical', isActive: true }
-            ];
-            
-            // Создаем дефолтные шаблоны
-            const defaultTemplates = [
-                {
-                    id: 'template-garpun',
-                    name: 'Гарпун (базовый)',
-                    description: 'Базовая смета для гарпунной системы',
-                    category: 'Потолки',
-                    system: 'garpun',
-                    items: [
-                        { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610 },
-                        { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310 },
-                        { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220 }
-                    ]
-                },
-                {
-                    id: 'template-garpun-plus',
-                    name: 'Гарпун +10%',
-                    description: 'Смета с повышенными ценами на 10%',
-                    category: 'Потолки',
-                    system: 'garpun',
-                    items: [
-                        { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 670 },
-                        { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 340 },
-                        { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 240 }
-                    ]
-                }
+                { id: 'item-1', name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610, category: 'basic-materials', isActive: true },
+                { id: 'item-2', name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310, category: 'profiles', isActive: true },
+                { id: 'item-3', name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220, category: 'profiles', isActive: true },
+                { id: 'item-4', name: 'Монтаж закладных под световое оборудование, установка светильников', unit: 'шт.', price: 780, category: 'electrical', isActive: true },
+                { id: 'item-5', name: 'Монтаж закладных под сдвоенное световое оборудование, установка светильников', unit: 'шт.', price: 1350, category: 'electrical', isActive: true },
+                { id: 'item-6', name: 'Монтаж закладных под люстру', unit: 'шт.', price: 1100, category: 'electrical', isActive: true },
+                { id: 'item-7', name: 'Монтаж закладной и установка вентилятора', unit: 'шт.', price: 1300, category: 'electrical', isActive: true },
+                { id: 'item-8', name: 'Монтаж закладной под потолочный карниз', unit: 'м.п.', price: 650, category: 'cornices', isActive: true },
+                { id: 'item-9', name: 'Установка потолочного карниза', unit: 'м.п.', price: 270, category: 'cornices', isActive: true },
+                { id: 'item-10', name: 'Установка разделителей', unit: 'м.п.', price: 1700, category: 'additional', isActive: true }
             ];
             
             // Сохраняем категории
-            const categoriesTransaction = db.transaction(['items'], 'readwrite');
-            const categoriesStore = categoriesTransaction.objectStore('items');
+            const itemsTransaction = db.transaction(['items'], 'readwrite');
+            const itemsStore = itemsTransaction.objectStore('items');
+            
             for (const category of defaultCategories) {
-                await categoriesStore.put({
+                await itemsStore.put({
                     ...category,
                     createdAt: new Date().toISOString()
                 });
             }
             
             // Сохраняем позиции
-            const itemsTransaction = db.transaction(['items'], 'readwrite');
-            const itemsStore = itemsTransaction.objectStore('items');
             for (const item of defaultItems) {
                 await itemsStore.put({
                     ...item,
                     createdAt: new Date().toISOString(),
-                    isDefault: true,
-                    isActive: true
+                    type: 'item'
                 });
             }
             
-            // Сохраняем шаблоны
+            // Дефолтные шаблоны
             const templatesTransaction = db.transaction(['templates'], 'readwrite');
             const templatesStore = templatesTransaction.objectStore('templates');
+            
+            const defaultTemplates = [
+                {
+                    id: 'template-garpun',
+                    name: 'Гарпун (базовый)',
+                    description: 'Базовая смета для гарпунной системы',
+                    category: 'Потолки',
+                    items: [
+                        { name: 'Полотно MSD Premium белое матовое с установкой', unit: 'м²', price: 610 },
+                        { name: 'Профиль стеновой/потолочный гарпунный с установкой', unit: 'м.п.', price: 310 },
+                        { name: 'Вставка по периметру гарпунная', unit: 'м.п.', price: 220 }
+                    ]
+                }
+            ];
+            
             for (const template of defaultTemplates) {
                 await templatesStore.put({
                     ...template,
-                    createdAt: new Date().toISOString(),
-                    isDefault: true
+                    createdAt: new Date().toISOString()
                 });
             }
             
-            // Дефолтные настройки компании
-            this.companyData = {
-                company: {
-                    name: 'PotolokForLife',
-                    fullName: 'Натяжные потолки на всю жизнь',
-                    address: 'Московская область, г. Пушкино',
-                    phone: '8(977)531-10-99',
-                    additionalPhone: '8(977)709-38-43',
-                    email: 'potolokforlife@yandex.ru'
-                },
-                payment: {
-                    defaultTerms: '1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.\n2. Окончательный расчет 50% в день завершения всех работ.\nОплата за материалы производится 100% до начала выполнения работ.',
-                    warranty: 'Гарантия 5 лет на материалы и работы'
-                }
-            };
-            
-            // Дефолтные настройки приложения
-            this.appSettings = {
-                app: {
-                    theme: 'light',
-                    currency: 'RUB',
-                    currencySymbol: '₽',
-                    dateFormat: 'DD.MM.YYYY'
-                },
-                estimates: {
-                    defaultStatus: 'draft',
-                    autoSave: true
-                },
-                prices: {
-                    defaultMarkup: 35,
-                    vatIncluded: false
-                }
-            };
-            
-            console.log('Созданы минимальные данные');
-            
         } catch (error) {
-            console.error('Ошибка создания минимальных данных:', error);
+            console.error('Ошибка создания дефолтных данных:', error);
         }
     }
 
@@ -257,32 +177,33 @@ class EstimatorApp {
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.navigateTo(e.target.dataset.page || e.target.closest('.menu-item').dataset.page);
+                const page = e.target.dataset.page || e.target.closest('.menu-item').dataset.page;
+                this.navigateTo(page);
             });
         });
 
         // Кнопки меню
-        document.getElementById('menu-toggle').addEventListener('click', () => this.toggleSidebar());
-        document.getElementById('close-menu').addEventListener('click', () => this.toggleSidebar());
-        document.getElementById('theme-toggle').addEventListener('click', () => this.toggleTheme());
-        document.getElementById('export-all').addEventListener('click', () => this.exportAllData());
+        document.getElementById('menu-toggle')?.addEventListener('click', () => this.toggleSidebar());
+        document.getElementById('close-menu')?.addEventListener('click', () => this.toggleSidebar());
+        document.getElementById('theme-toggle')?.addEventListener('click', () => this.toggleTheme());
+        document.getElementById('export-all')?.addEventListener('click', () => this.exportAllData());
 
         // Создание сметы
-        document.getElementById('new-estimate').addEventListener('click', () => {
+        document.getElementById('new-estimate')?.addEventListener('click', () => {
             this.navigateTo('create');
             this.createNewEstimate();
         });
 
         // Сохранение сметы
-        document.getElementById('save-estimate').addEventListener('click', () => this.saveEstimate());
+        document.getElementById('save-estimate')?.addEventListener('click', () => this.saveEstimate());
 
         // Добавление позиций
-        document.getElementById('add-item').addEventListener('click', () => this.showAddItemModal());
-        document.getElementById('add-from-template').addEventListener('click', () => this.showTemplatesModal());
+        document.getElementById('add-item')?.addEventListener('click', () => this.showAddItemModal());
+        document.getElementById('add-from-template')?.addEventListener('click', () => this.showTemplatesModal());
 
         // Экспорт PDF
-        document.getElementById('export-pdf').addEventListener('click', () => this.generatePDF());
-        document.getElementById('preview-pdf').addEventListener('click', () => this.previewPDF());
+        document.getElementById('export-pdf')?.addEventListener('click', () => this.generatePDF());
+        document.getElementById('preview-pdf')?.addEventListener('click', () => this.previewPDF());
 
         // Поиск и фильтры
         const searchInput = document.getElementById('search-estimates');
@@ -301,7 +222,7 @@ class EstimatorApp {
         }
 
         // Синхронизация
-        document.getElementById('sync-button').addEventListener('click', () => this.syncData());
+        document.getElementById('sync-button')?.addEventListener('click', () => this.syncData());
 
         // Экспорт/импорт
         document.getElementById('export-json')?.addEventListener('click', () => this.exportDataToJSON());
@@ -332,41 +253,20 @@ class EstimatorApp {
             }
         });
 
-        // Обработка онлайн/оффлайн статуса
+        // Онлайн/оффлайн статус
         window.addEventListener('online', () => this.updateOnlineStatus(true));
         window.addEventListener('offline', () => this.updateOnlineStatus(false));
-    }
-
-    async loadData() {
-        try {
-            const db = await this.openDB();
-            
-            // Загружаем сметы
-            this.estimates = await this.getAllFromStore(db, 'estimates') || [];
-            
-            // Загружаем шаблоны
-            this.templates = await this.getAllFromStore(db, 'templates') || [];
-            
-            // Загружаем позиции и категории
-            const allItems = await this.getAllFromStore(db, 'items') || [];
-            this.items = allItems.filter(item => item.type !== 'category');
-            this.categories = allItems.filter(item => item.type === 'category');
-            
-            console.log('Данные загружены:', {
-                estimates: this.estimates.length,
-                templates: this.templates.length,
-                items: this.items.length,
-                categories: this.categories.length
+        
+        // Проверка обновлений Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('Service Worker обновлен, перезагружаем...');
+                window.location.reload();
             });
-            
-        } catch (error) {
-            console.error('Ошибка загрузки данных:', error);
-            this.showNotification('Ошибка загрузки данных', 'error');
         }
     }
 
     async navigateTo(page) {
-        // Закрываем меню на мобильных
         if (window.innerWidth < 769) {
             this.toggleSidebar(false);
         }
@@ -413,6 +313,7 @@ class EstimatorApp {
 
     toggleSidebar(force) {
         const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
         
         if (force !== undefined) {
             this.isSidebarOpen = force;
@@ -426,12 +327,38 @@ class EstimatorApp {
     toggleTheme() {
         const isDark = document.body.classList.toggle('dark-theme');
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        document.getElementById('theme-toggle').textContent = isDark ? '☀️' : '🌙';
+        const themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            themeBtn.textContent = isDark ? '☀️' : '🌙';
+        }
+    }
+
+    async loadData() {
+        try {
+            const db = await this.openDB();
+            
+            this.estimates = await this.getAllFromStore(db, 'estimates') || [];
+            this.templates = await this.getAllFromStore(db, 'templates') || [];
+            
+            const allItems = await this.getAllFromStore(db, 'items') || [];
+            this.items = allItems.filter(item => item.type !== 'category');
+            this.categories = allItems.filter(item => item.type === 'category');
+            
+            console.log('Данные загружены:', {
+                estimates: this.estimates.length,
+                templates: this.templates.length,
+                items: this.items.length,
+                categories: this.categories.length
+            });
+            
+        } catch (error) {
+            console.error('Ошибка загрузки данных:', error);
+            this.showNotification('Ошибка загрузки данных', 'error');
+        }
     }
 
     async loadEstimates() {
         const listElement = document.getElementById('estimates-list');
-        
         if (!listElement) return;
         
         if (this.estimates.length === 0) {
@@ -507,15 +434,15 @@ class EstimatorApp {
         
         const filtered = this.estimates.filter(estimate => 
             estimate.name.toLowerCase().includes(query.toLowerCase()) ||
-            estimate.object.toLowerCase().includes(query.toLowerCase()) ||
-            estimate.address.toLowerCase().includes(query.toLowerCase())
+            (estimate.object && estimate.object.toLowerCase().includes(query.toLowerCase())) ||
+            (estimate.address && estimate.address.toLowerCase().includes(query.toLowerCase()))
         );
         
         listElement.innerHTML = filtered.map(estimate => this.renderEstimateCard(estimate)).join('');
     }
 
     renderEstimateCard(estimate) {
-        const date = new Date(estimate.date).toLocaleDateString('ru-RU');
+        const date = estimate.date ? new Date(estimate.date).toLocaleDateString('ru-RU') : '-';
         const statusText = {
             'draft': 'Черновик',
             'sent': 'Отправлено',
@@ -529,18 +456,18 @@ class EstimatorApp {
             <div class="estimate-card" data-id="${estimate.id}">
                 <div class="estimate-header">
                     <div>
-                        <h3 class="estimate-title">${estimate.name}</h3>
+                        <h3 class="estimate-title">${estimate.name || 'Без названия'}</h3>
                         <div class="estimate-details">
-                            <div>${estimate.object} • ${estimate.address}</div>
+                            <div>${estimate.object || 'Объект не указан'}</div>
                             <div>Создано: ${date}</div>
                         </div>
                     </div>
-                    <span class="estimate-status status-${estimate.status}">${statusText}</span>
+                    <span class="estimate-status status-${estimate.status || 'draft'}">${statusText}</span>
                 </div>
                 <div class="estimate-info">
                     <div class="estimate-metrics">
-                        <span>Площадь: ${estimate.area || 0} м²</span>
-                        <span>Периметр: ${estimate.perimeter || 0} м</span>
+                        ${estimate.area ? `<span>Площадь: ${estimate.area} м²</span>` : ''}
+                        ${estimate.perimeter ? `<span>Периметр: ${estimate.perimeter} м</span>` : ''}
                     </div>
                     <div class="estimate-total">
                         <strong>${total.toLocaleString('ru-RU')} руб.</strong>
@@ -579,7 +506,10 @@ class EstimatorApp {
             updatedAt: new Date().toISOString()
         };
 
-        document.getElementById('edit-title').textContent = 'Новая смета';
+        const titleElement = document.getElementById('edit-title');
+        if (titleElement) {
+            titleElement.textContent = 'Новая смета';
+        }
         this.setupEstimateForm();
     }
 
@@ -646,11 +576,11 @@ class EstimatorApp {
                     </select>
                 </td>
                 <td>
-                    <input type="number" class="item-qty" value="${item.quantity}" step="0.01" min="0"
+                    <input type="number" class="item-qty" value="${item.quantity || 0}" step="0.01" min="0"
                            onchange="app.updateItemField('${item.id}', 'quantity', parseFloat(this.value))">
                 </td>
                 <td>
-                    <input type="number" class="item-price" value="${item.price}" step="0.01" min="0"
+                    <input type="number" class="item-price" value="${item.price || 0}" step="0.01" min="0"
                            onchange="app.updateItemField('${item.id}', 'price', parseFloat(this.value))">
                 </td>
                 <td class="item-total">${((item.quantity || 0) * (item.price || 0)).toFixed(2)}</td>
@@ -1107,7 +1037,7 @@ class EstimatorApp {
                 this.navigateTo('estimates');
                 
             }, 500);
-        }, 1500);
+        }, 1000);
     }
 
     checkInstallPrompt() {
@@ -1456,7 +1386,7 @@ class EstimatorApp {
             await store.clear();
             
             // Создаем новые данные
-            await this.createDefaultData();
+            await this.createDefaultData(db);
             
             // Обновляем данные
             await this.loadData();
@@ -1470,129 +1400,18 @@ class EstimatorApp {
     }
 
     showExcelImportModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-header">
-                <h3>Импорт из Excel</h3>
-                <button class="modal-close">×</button>
-            </div>
-            <div class="modal-body">
-                <p>Для импорта данных из Excel:</p>
-                <ol>
-                    <li>Откройте ваш Excel файл</li>
-                    <li>Сохраните как CSV (Файл → Сохранить как → CSV UTF-8)</li>
-                    <li>Загрузите CSV файл ниже:</li>
-                </ol>
-                
-                <div class="form-group">
-                    <label for="excel-file">Выберите CSV файл:</label>
-                    <input type="file" id="excel-file" accept=".csv">
-                </div>
-                
-                <div class="form-group">
-                    <label>Структура CSV:</label>
-                    <pre>Наименование;Ед.изм.;Цена;Категория;Описание</pre>
-                </div>
-                
-                <div class="modal-actions">
-                    <button class="btn-secondary modal-close">Отмена</button>
-                    <button id="process-excel" class="btn-primary">Импортировать</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        this.showModal(modal);
-        
-        modal.querySelector('.modal-close').addEventListener('click', () => {
-            modal.remove();
-            this.hideModal();
-        });
-        
-        document.getElementById('process-excel').addEventListener('click', () => {
-            this.processExcelImport();
-        });
-    }
-
-    async processExcelImport() {
-        const fileInput = document.getElementById('excel-file');
-        if (!fileInput || !fileInput.files.length) {
-            this.showNotification('Выберите файл', 'warning');
-            return;
-        }
-        
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-            try {
-                const csvData = e.target.result;
-                const items = this.parseCSV(csvData);
-                
-                await this.importItems(items);
-                this.showNotification(`Импортировано ${items.length} позиций`, 'success');
-                
-                // Закрываем модальное окно
-                document.querySelector('.modal').remove();
-                document.getElementById('modal-overlay').style.display = 'none';
-                
-            } catch (error) {
-                console.error('Ошибка обработки CSV:', error);
-                this.showNotification('Ошибка обработки файла', 'error');
-            }
-        };
-        
-        reader.readAsText(file, 'UTF-8');
-    }
-
-    parseCSV(csvText) {
-        const lines = csvText.split('\n');
-        const items = [];
-        
-        // Пропускаем заголовок (первую строку)
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            
-            // Разделяем по точке с запятой (CSV формат Excel)
-            const parts = line.split(';');
-            
-            if (parts.length >= 3) {
-                const item = {
-                    id: this.generateId(),
-                    name: parts[0]?.trim() || '',
-                    unit: parts[1]?.trim() || 'шт.',
-                    price: parseFloat(parts[2]?.replace(',', '.') || 0),
-                    category: parts[3]?.trim() || 'Прочие',
-                    description: parts[4]?.trim() || '',
-                    type: 'item',
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                
-                if (item.name && !isNaN(item.price) && item.price > 0) {
-                    items.push(item);
-                }
-            }
-        }
-        
-        return items;
+        this.showNotification('Функция в разработке', 'info');
     }
 
     async loadTemplates() {
-        // Загрузка шаблонов будет реализована позже
         console.log('Загрузка шаблонов...');
     }
 
     async loadItemsManager() {
-        // Загрузка менеджера позиций будет реализована позже
         console.log('Загрузка менеджера позиций...');
     }
 
     showTemplatesModal() {
-        // Модальное окно для выбора шаблонов будет реализовано позже
         this.showNotification('Функция в разработке', 'info');
     }
 }
@@ -1611,117 +1430,14 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
             .then(registration => {
                 console.log('ServiceWorker зарегистрирован:', registration);
+                
+                // Проверяем обновления каждые 60 минут
+                setInterval(() => {
+                    registration.update();
+                }, 60 * 60 * 1000);
             })
             .catch(error => {
                 console.log('Ошибка регистрации ServiceWorker:', error);
             });
     });
-}
-// Дополнительные методы для работы с Service Worker
-class EstimatorApp {
-    // ... существующий код ...
-
-    async checkForUpdates() {
-        if ('serviceWorker' in navigator) {
-            try {
-                const registration = await navigator.serviceWorker.ready;
-                
-                // Проверяем обновления
-                await registration.update();
-                
-                // Если есть новая версия SW
-                if (registration.waiting) {
-                    this.showUpdateNotification();
-                }
-                
-            } catch (error) {
-                console.error('Ошибка проверки обновлений:', error);
-            }
-        }
-    }
-
-    showUpdateNotification() {
-        const notification = document.createElement('div');
-        notification.className = 'update-notification';
-        notification.innerHTML = `
-            <div class="update-content">
-                <p>Доступна новая версия приложения!</p>
-                <div class="update-actions">
-                    <button id="update-now" class="btn-primary">Обновить сейчас</button>
-                    <button id="update-later" class="btn-secondary">Позже</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        document.getElementById('update-now').addEventListener('click', () => {
-            this.updateServiceWorker();
-            notification.remove();
-        });
-        
-        document.getElementById('update-later').addEventListener('click', () => {
-            notification.remove();
-        });
-    }
-
-    async updateServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            const registration = await navigator.serviceWorker.ready;
-            
-            // Сообщаем SW обновить себя
-            registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
-            
-            // Перезагружаем страницу после обновления
-            location.reload();
-        }
-    }
-
-    async getCacheInfo() {
-        if ('serviceWorker' in navigator) {
-            try {
-                return new Promise((resolve) => {
-                    const channel = new MessageChannel();
-                    
-                    channel.port1.onmessage = (event) => {
-                        if (event.data.type === 'CACHE_INFO') {
-                            resolve(event.data.data);
-                        }
-                    };
-                    
-                    navigator.serviceWorker.controller?.postMessage(
-                        { type: 'GET_CACHE_INFO' },
-                        [channel.port2]
-                    );
-                });
-            } catch (error) {
-                console.error('Ошибка получения информации о кэше:', error);
-                return null;
-            }
-        }
-    }
-
-    async clearAppCache() {
-        if (confirm('Очистить кэш приложения? Это удалит все оффлайн-данные.')) {
-            try {
-                if ('serviceWorker' in navigator) {
-                    // Сообщаем SW очистить кэш
-                    navigator.serviceWorker.controller?.postMessage({ 
-                        type: 'CLEAR_CACHE' 
-                    });
-                    
-                    // Очищаем IndexedDB
-                    const db = await this.openDB();
-                    await db.close();
-                    indexedDB.deleteDatabase('EstimatorDB');
-                    
-                    this.showNotification('Кэш очищен', 'success');
-                    location.reload();
-                }
-            } catch (error) {
-                console.error('Ошибка очистки кэша:', error);
-                this.showNotification('Ошибка очистки кэша', 'error');
-            }
-        }
-    }
 }
