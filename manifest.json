@@ -50,15 +50,6 @@
       "type": "image/png"
     }
   ],
-  "screenshots": [
-    {
-      "src": "screenshots/screenshot1.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Главный экран приложения"
-    }
-  ],
   "categories": ["business", "productivity"],
   "shortcuts": [
     {
@@ -66,23 +57,14 @@
       "short_name": "Новая",
       "description": "Создать новую смету",
       "url": "/?new=true",
-      "icons": [{ "src": "icons/add-96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
     },
     {
       "name": "Список смет",
       "short_name": "Сметы",
       "description": "Просмотр всех смет",
       "url": "/?estimates",
-      "icons": [{ "src": "icons/list-96.png", "sizes": "96x96" }]
-    }
-  ],
-  "file_handlers": [
-    {
-      "action": "/import",
-      "accept": {
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-        "application/vnd.ms-excel": [".xls"]
-      }
+      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
     }
   ]
 }
