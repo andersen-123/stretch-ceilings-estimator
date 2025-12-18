@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>Настройщик смет | Натяжные потолки</title>
+    <meta name="description" content="Создание и управление сметами на натяжные потолки">
+    
+    <!-- PWA метаданные -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-title" content="Сметы">
+    
+    <!-- Стили -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Иконки -->
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    
+    <!-- Библиотеки для PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <!-- Приветственный экран -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <div class="logo">🏠</div>
+            <h1>Настройщик смет</h1>
+            <p>Натяжные потолки</p>
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Загрузка...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основное приложение -->
+    <div id="app" class="app-container" style="display: none;">
+        <!-- Шапка -->
+        <header class="app-header">
+            <div class="header-left">
+                <button id="menu-toggle" class="icon-button">☰</button>
+                <h1 id="current-page">Сметы</h1>
+            </div>
+            <div class="header-right">
+                <button id="theme-toggle" class="icon-button">🌙</button>
+                <button id="sync-button" class="icon-button" title="Синхронизировать">🔄</button>
+            </div>
+        </header>
+
+        <!-- Боковое меню -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <div class="company-info">
+                    <h2>PotolokForLife</h2>
+                    <p>Натяжные потолки на всю жизнь</p>
+                    <p class="small">8(977)531-10-99</p>
+                </div>
+                <button id="close-menu" class="icon-button">×</button>
+            </div>
+            
+            <div class="menu-section">
+                <h3>Основное</h3>
+                <ul class="menu-list">
+                    <li><a href="#" class="menu-item active" data-page="estimates">📋 Сметы</a></li>
+                    <li><a href="#" class="menu-item" data-page="create">➕ Новая смета</a></li>
+                    <li><a href="#" class="menu-item" data-page="templates">📁 Шаблоны</a></li>
+                    <li><a href="#" class="menu-item" data-page="clients">👥 Клиенты</a></li>
+                </ul>
+            </div>
+            
+            <div class="menu-section">
+                <h3>База позиций</h3>
+                <ul class="menu-list">
+                    <li><a href="#" class="menu-item" data-page="items">📦 Позиции</a></li>
+                    <li><a href="#" class="menu-item" data-page="categories">🗂️ Категории</a></li>
+                </ul>
+            </div>
+            
+            <div class="menu-section">
+                <h3>Настройки</h3>
+                <ul class="menu-list">
+                    <li><a href="#" class="menu-item" data-page="company">🏢 Компания</a></li>
+                    <li><a href="#" class="menu-item" data-page="settings">⚙️ Настройки</a></li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="storage-info">
+                    <div class="storage-bar">
+                        <div class="storage-fill" id="storage-fill"></div>
+                    </div>
+                    <p>Хранилище: <span id="storage-used">0</span>/<span id="storage-total">5</span> МБ</p>
+                </div>
+                <button id="install-btn" class="btn-secondary" style="display: none;">📲 Установить</button>
+                <button id="export-all" class="btn-secondary">📤 Экспорт данных</button>
+            </div>
+        </nav>
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            <!-- Экран списка смет -->
+            <div id="estimates-page" class="page active">
+                <div class="page-header">
+                    <h2>Сметы</h2>
+                    <div class="actions">
+                        <button id="new-estimate" class="btn-primary">➕ Новая смета</button>
+                        <div class="search-box">
+                            <input type="text" id="search-estimates" placeholder="Поиск смет...">
+                            <span>🔍</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="filters">
+                    <select id="filter-status">
+                        <option value="all">Все статусы</option>
+                        <option value="draft">Черновик</option>
+                        <option value="sent">Отправлено</option>
+                        <option value="accepted">Принято</option>
+                        <option value="completed">Завершено</option>
+                    </select>
+                    <select id="sort-by">
+                        <option value="date-desc">Сначала новые</option>
+                        <option value="date-asc">Сначала старые</option>
+                        <option value="name">По названию</option>
+                        <option value="amount">По сумме</option>
+                    </select>
+                </div>
+                
+                <div id="estimates-list" class="estimates-grid">
+                    <!-- Сметы будут загружены через JS -->
+                </div>
+            </div>
+
+            <!-- Экран создания/редактирования сметы -->
+            <div id="create-page" class="page">
+                <div class="page-header">
+                    <h2 id="edit-title">Новая смета</h2>
+                    <div class="actions">
+                        <button id="save-estimate" class="btn-primary">💾 Сохранить</button>
+                        <button id="preview-pdf" class="btn-secondary">👁️ Просмотр PDF</button>
+                        <button id="export-pdf" class="btn-success">📄 Создать PDF</button>
+                    </div>
+                </div>
+                
+                <div class="estimate-form">
+                    <!-- Основная информация -->
+                    <div class="form-section">
+                        <h3>Основная информация</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Название сметы *</label>
+                                <input type="text" id="estimate-name" placeholder="Например: Квартира в Химках">
+                            </div>
+                            <div class="form-group">
+                                <label>Статус</label>
+                                <select id="estimate-status">
+                                    <option value="draft">Черновик</option>
+                                    <option value="sent">Отправлено клиенту</option>
+                                    <option value="accepted">Принято</option>
+                                    <option value="completed">Завершено</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Объект *</label>
+                                <input type="text" id="estimate-object" placeholder="Квартира / Офис / Дом">
+                            </div>
+                            <div class="form-group">
+                                <label>Адрес *</label>
+                                <input type="text" id="estimate-address" placeholder="Полный адрес">
+                            </div>
+                            <div class="form-group">
+                                <label>Кол-во помещений</label>
+                                <input type="number" id="estimate-rooms" min="1" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Дата создания</label>
+                                <input type="date" id="estimate-date" value="">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Параметры помещения -->
+                    <div class="form-section">
+                        <h3>Параметры помещения</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Площадь (S), м²</label>
+                                <input type="number" id="area-s" step="0.01" min="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Периметр (P), м</label>
+                                <input type="number" id="perimeter-p" step="0.01" min="0" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label>Высота (h), м</label>
+                                <input type="number" id="height-h" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Позиции сметы -->
+                    <div class="form-section">
+                        <div class="section-header">
+                            <h3>Позиции сметы</h3>
+                            <button type="button" id="add-item" class="btn-secondary">➕ Добавить позицию</button>
+                            <button type="button" id="add-from-template" class="btn-secondary">📁 Из шаблона</button>
+                        </div>
+                        
+                        <div class="items-table-container">
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th width="30">#</th>
+                                        <th>Наименование</th>
+                                        <th width="80">Ед.изм.</th>
+                                        <th width="100">Кол-во</th>
+                                        <th width="120">Цена, руб.</th>
+                                        <th width="120">Сумма, руб.</th>
+                                        <th width="60">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="items-tbody">
+                                    <!-- Строки будут добавляться динамически -->
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="4"></td>
+                                        <td><strong>Итого:</strong></td>
+                                        <td><strong id="total-amount">0.00</strong></td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="4"></td>
+                                        <td>Скидка:</td>
+                                        <td>
+                                            <input type="number" id="discount" min="0" max="100" step="1" value="0" style="width: 60px;"> %
+                                            <span id="discount-amount">0.00</span>
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                    <tr class="total-row">
+                                        <td colspan="4"></td>
+                                        <td><strong>К оплате:</strong></td>
+                                        <td><strong id="final-amount">0.00</strong></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Дополнительная информация -->
+                    <div class="form-section">
+                        <h3>Дополнительная информация</h3>
+                        <div class="form-group">
+                            <label>Примечания</label>
+                            <textarea id="estimate-notes" rows="3" placeholder="Дополнительные заметки..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Условия оплаты</label>
+                            <div class="payment-terms">
+                                <label><input type="checkbox" id="payment-50-50" checked> 50% предоплата</label>
+                                <label><input type="checkbox" id="payment-100-material"> 100% за материалы</label>
+                            </div>
+                            <textarea id="payment-details" rows="2">1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
+2. Окончательный расчет 50% в день завершения всех работ.
+Оплата за материалы производится 100% до начала выполнения работ.</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Экран шаблонов -->
+            <div id="templates-page" class="page">
+                <div class="page-header">
+                    <h2>Шаблоны</h2>
+                    <div class="actions">
+                        <button id="new-template" class="btn-primary">➕ Новый шаблон</button>
+                    </div>
+                </div>
+                
+                <div class="templates-list">
+                    <!-- Шаблоны будут загружены динамически -->
+                </div>
+            </div>
+
+            <!-- Экран управления позициями -->
+            <div id="items-page" class="page">
+                <div class="page-header">
+                    <h2>База позиций</h2>
+                    <div class="actions">
+                        <button id="new-item" class="btn-primary">➕ Новая позиция</button>
+                        <button id="import-excel" class="btn-secondary">📥 Импорт из Excel</button>
+                    </div>
+                </div>
+                
+                <div class="items-manager">
+                    <!-- Управление позициями -->
+                </div>
+            </div>
+
+            <!-- Другие страницы будут добавлены аналогично -->
+        </main>
+
+        <!-- Модальные окна -->
+        <div id="modal-overlay" class="modal-overlay"></div>
+        
+        <!-- Модальное окно добавления позиции -->
+        <div id="add-item-modal" class="modal">
+            <div class="modal-header">
+                <h3>Добавить позицию</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- Форма добавления позиции -->
+            </div>
+        </div>
+
+        <!-- Модальное окно предпросмотра PDF -->
+        <div id="pdf-preview-modal" class="modal modal-large">
+            <div class="modal-header">
+                <h3>Предпросмотр КП</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="pdf-preview-content">
+                    <!-- PDF preview will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Уведомления -->
+        <div id="notifications"></div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="app.js" type="module"></script>
+    <script src="pdf-generator.js" type="module"></script>
+</body>
+</html>
