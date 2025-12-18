@@ -254,6 +254,13 @@ body {
     gap: 1rem;
 }
 
+.page-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
 .actions {
     display: flex;
     gap: 0.75rem;
@@ -301,6 +308,10 @@ body {
 .btn-danger {
     background: var(--danger-color);
     color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
 }
 
 /* Формы */
@@ -355,12 +366,14 @@ body {
 .items-table-container {
     overflow-x: auto;
     margin-top: 1rem;
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
 }
 
 .items-table {
     width: 100%;
     border-collapse: collapse;
-    background: var(--card-bg);
 }
 
 .items-table th {
@@ -622,6 +635,16 @@ body {
     .search-box input {
         width: 100%;
     }
+    
+    .page-actions {
+        flex-direction: column;
+    }
+    
+    .page-actions .btn-secondary,
+    .page-actions .btn-danger {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 @media (min-width: 769px) {
@@ -642,11 +665,6 @@ body.dark-theme {
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
 }
 
 /* Progress bar */
@@ -688,4 +706,91 @@ body.dark-theme {
     text-align: center;
     font-size: 0.9rem;
     color: #666;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Section header */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Payment terms */
+.payment-terms {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.payment-terms label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+/* File input styling */
+input[type="file"] {
+    display: none;
+}
+
+label.btn-secondary {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Estimates info */
+.estimate-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+.estimate-metrics {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.estimate-total {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Estimate actions */
+.estimate-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.estimate-actions .icon-button {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+}
+
+.estimate-rooms {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
 }
