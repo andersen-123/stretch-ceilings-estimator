@@ -1,6 +1,5 @@
 // PDF Generator для создания коммерческих предложений
-import { jsPDF } from 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-import 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js';
+// Используем глобальный jsPDF (загружен через тег script в HTML)
 
 class PDFGenerator {
     constructor() {
@@ -12,8 +11,13 @@ class PDFGenerator {
     }
 
     async generateEstimatePDF(estimate, companyData = null) {
+        // Проверяем, что jsPDF доступен глобально
+        if (typeof window.jsPDF === 'undefined') {
+            throw new Error('jsPDF не загружен. Проверьте подключение библиотеки.');
+        }
+        
         // Создаем новый PDF документ
-        this.doc = new jsPDF({
+        this.doc = new window.jsPDF({
             orientation: 'portrait',
             unit: 'mm',
             format: 'a4'
@@ -54,7 +58,7 @@ class PDFGenerator {
             email: 'potolokforlife@yandex.ru'
         };
 
-        // Логотип компании (можно заменить на реальное изображение)
+        // Логотип компании
         this.doc.setFontSize(20);
         this.doc.setFont('helvetica', 'bold');
         this.doc.text(company.name, this.margin, 15);
@@ -159,7 +163,14 @@ class PDFGenerator {
         this.doc.text('Смета работ и материалов:', this.margin, this.currentY);
         this.currentY += 5;
         
-        // Создаем таблицу
+        // Проверяем наличие jsPDF AutoTable
+        if (typeof this.doc.autoTable !== 'function') {
+            // Простая таблица без AutoTable
+            this.addSimpleTable(items);
+            return;
+        }
+        
+        // Создаем таблицу с AutoTable
         this.doc.autoTable({
             startY: this.currentY,
             head: [['№', 'Наименование', 'Ед.изм.', 'Кол-во', 'Цена, руб.', 'Сумма, руб.']],
@@ -172,17 +183,17 @@ class PDFGenerator {
                 cellWidth: 'auto'
             },
             headStyles: {
-                fillColor: [79, 70, 229], // primary color
+                fillColor: [79, 70, 229],
                 textColor: 255,
                 fontStyle: 'bold'
             },
             columnStyles: {
-                0: { cellWidth: 15 }, // №
-                1: { cellWidth: 80 }, // Наименование
-                2: { cellWidth: 25 }, // Ед.изм.
-                3: { cellWidth: 25 }, // Кол-во
-                4: { cellWidth: 30 }, // Цена
-                5: { cellWidth: 30 }  // Сумма
+                0: { cellWidth: 15 },
+                1: { cellWidth: 80 },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 25 },
+                4: { cellWidth: 30 },
+                5: { cellWidth: 30 }
             },
             didDrawPage: (data) => {
                 this.currentY = data.cursor.y;
@@ -190,6 +201,59 @@ class PDFGenerator {
         });
         
         this.currentY += 5;
+    }
+
+    addSimpleTable(items) {
+        // Простая реализация таблицы без AutoTable
+        let y = this.currentY;
+        const colWidths = [15, 80, 25, 25, 30, 30];
+        const startX = this.margin;
+        
+        // Заголовок таблицы
+        this.doc.setFontSize(10);
+        this.doc.setFont('helvetica', 'bold');
+        const headers = ['№', 'Наименование', 'Ед.изм.', 'Кол-во', 'Цена', 'Сумма'];
+        
+        headers.forEach((header, i) => {
+            let x = startX;
+            for (let j = 0; j < i; j++) {
+                x += colWidths[j];
+            }
+            this.doc.text(header, x, y);
+        });
+        
+        y += 7;
+        
+        // Данные таблицы
+        this.doc.setFont('helvetica', 'normal');
+        items.forEach((item, index) => {
+            const row = [
+                (index + 1).toString(),
+                item.name.substring(0, 30) + (item.name.length > 30 ? '...' : ''),
+                item.unit,
+                (item.quantity || 0).toFixed(2),
+                this.formatCurrency(item.price || 0),
+                this.formatCurrency((item.quantity || 0) * (item.price || 0))
+            ];
+            
+            row.forEach((cell, i) => {
+                let x = startX;
+                for (let j = 0; j < i; j++) {
+                    x += colWidths[j];
+                }
+                this.doc.text(cell, x, y);
+            });
+            
+            y += 7;
+            
+            // Проверяем, не вышли ли за пределы страницы
+            if (y > this.pageHeight - 30) {
+                this.doc.addPage();
+                y = this.margin;
+            }
+        });
+        
+        this.currentY = y + 10;
     }
 
     addTotals(estimate) {
@@ -201,31 +265,19 @@ class PDFGenerator {
         this.doc.setFontSize(12);
         this.doc.setFont('helvetica', 'bold');
         
-        // Итоговая таблица
-        const totalsData = [
-            ['Сумма:', this.formatCurrency(subtotal)],
-            ['Скидка:', `${discount}% (${this.formatCurrency(discountAmount)})`],
-            ['ИТОГО К ОПЛАТЕ:', this.formatCurrency(finalTotal)]
-        ];
+        // Итоги
+        const totalsX = this.pageWidth - this.margin - 80;
         
-        this.doc.autoTable({
-            startY: this.currentY,
-            body: totalsData,
-            margin: { left: this.pageWidth - 100, right: this.margin },
-            tableWidth: 80,
-            styles: {
-                fontSize: 12,
-                cellPadding: 5
-            },
-            columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 60 },
-                1: { fontStyle: 'bold', cellWidth: 40, halign: 'right' }
-            },
-            theme: 'grid',
-            didDrawPage: (data) => {
-                this.currentY = data.cursor.y;
-            }
-        });
+        this.doc.text('Сумма:', totalsX, this.currentY);
+        this.doc.text(this.formatCurrency(subtotal), totalsX + 40, this.currentY, { align: 'right' });
+        this.currentY += 7;
+        
+        this.doc.text('Скидка:', totalsX, this.currentY);
+        this.doc.text(`${discount}% (${this.formatCurrency(discountAmount)})`, totalsX + 40, this.currentY, { align: 'right' });
+        this.currentY += 7;
+        
+        this.doc.text('ИТОГО К ОПЛАТЕ:', totalsX, this.currentY);
+        this.doc.text(this.formatCurrency(finalTotal), totalsX + 40, this.currentY, { align: 'right' });
         
         this.currentY += 20;
     }
@@ -242,7 +294,7 @@ class PDFGenerator {
             (companyData?.payment?.defaultTerms || 
             `1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
 2. Окончательный расчет 50% в день завершения всех работ.
-Оплата за материалы производится 100% до начала выполнения работ.`);
+Оплата за материалов производится 100% до начала выполнения работ.`);
         
         const lines = this.doc.splitTextToSize(paymentTerms, this.pageWidth - 2 * this.margin);
         this.doc.text(lines, this.margin, this.currentY);
@@ -319,25 +371,25 @@ export function generateEstimateHTML(estimate, companyData = null) {
         (companyData?.payment?.defaultTerms || 
         `1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
 2. Окончательный расчет 50% в день завершения всех работ.
-Оплата за материалы производится 100% до начала выполнения работ.`);
+Оплата за материалов производится 100% до начала выполнения работ.`);
     
     const warranty = companyData?.payment?.warranty || 'Гарантия 5 лет на материалы и работы';
     
     return `
-        <div class="pdf-preview">
-            <div class="pdf-header">
-                <h1>${company.name}</h1>
-                <h2>${company.fullName}</h2>
-                ${company.address ? `<p>${company.address}</p>` : ''}
-                ${company.phone ? `<p>Тел: ${company.phone}</p>` : ''}
-                ${company.additionalPhone ? `<p>Доп. тел: ${company.additionalPhone}</p>` : ''}
-                ${company.email ? `<p>Email: ${company.email}</p>` : ''}
-                <h3>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</h3>
-                <p>№ ${estimate.id} от ${date}</p>
+        <div class="pdf-preview" style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: white; color: #333;">
+            <div class="pdf-header" style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px;">
+                <h1 style="color: #4f46e5; margin-bottom: 10px;">${company.name}</h1>
+                <h2 style="color: #666; font-size: 18px; margin-bottom: 10px;">${company.fullName}</h2>
+                ${company.address ? `<p style="color: #666;">${company.address}</p>` : ''}
+                ${company.phone ? `<p style="color: #666;">Тел: ${company.phone}</p>` : ''}
+                ${company.additionalPhone ? `<p style="color: #666;">Доп. тел: ${company.additionalPhone}</p>` : ''}
+                ${company.email ? `<p style="color: #666;">Email: ${company.email}</p>` : ''}
+                <h3 style="color: #333; margin-top: 20px; font-size: 24px;">КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</h3>
+                <p style="color: #666;">№ ${estimate.id} от ${date}</p>
             </div>
             
-            <div class="pdf-client-info">
-                <h4>Клиент:</h4>
+            <div class="pdf-client-info" style="margin-bottom: 30px; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+                <h4 style="color: #4f46e5; margin-bottom: 15px;">Клиент:</h4>
                 ${estimate.object ? `<p><strong>Объект:</strong> ${estimate.object}</p>` : ''}
                 ${estimate.address ? `<p><strong>Адрес:</strong> ${estimate.address}</p>` : ''}
                 ${estimate.rooms ? `<p><strong>Помещений:</strong> ${estimate.rooms}</p>` : ''}
@@ -349,71 +401,71 @@ export function generateEstimateHTML(estimate, companyData = null) {
                     ].filter(Boolean).join(', ')}</p>` : ''}
             </div>
             
-            <div class="pdf-items">
-                <h4>Смета работ и материалов:</h4>
-                <table class="pdf-table">
+            <div class="pdf-items" style="margin-bottom: 30px;">
+                <h4 style="color: #4f46e5; margin-bottom: 15px;">Смета работ и материалов:</h4>
+                <table class="pdf-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr>
-                            <th>№</th>
-                            <th>Наименование</th>
-                            <th>Ед.изм.</th>
-                            <th>Кол-во</th>
-                            <th>Цена, руб.</th>
-                            <th>Сумма, руб.</th>
+                        <tr style="background: #4f46e5; color: white;">
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">№</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Наименование</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Ед.изм.</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Кол-во</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Цена, руб.</th>
+                            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Сумма, руб.</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${items.map((item, index) => `
-                            <tr>
-                                <td>${index + 1}</td>
-                                <td>${item.name}</td>
-                                <td>${item.unit}</td>
-                                <td>${(item.quantity || 0).toFixed(2)}</td>
-                                <td>${(item.price || 0).toFixed(2)}</td>
-                                <td>${((item.quantity || 0) * (item.price || 0)).toFixed(2)}</td>
+                            <tr style="${index % 2 === 0 ? 'background: #f9f9f9;' : ''}">
+                                <td style="padding: 10px; border: 1px solid #ddd;">${index + 1}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${item.name}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${item.unit}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${(item.quantity || 0).toFixed(2)}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${(item.price || 0).toFixed(2)}</td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">${((item.quantity || 0) * (item.price || 0)).toFixed(2)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
             </div>
             
-            <div class="pdf-totals">
-                <table class="pdf-totals-table">
+            <div class="pdf-totals" style="margin-bottom: 30px; text-align: right;">
+                <table class="pdf-totals-table" style="width: 300px; margin-left: auto; border-collapse: collapse;">
                     <tr>
-                        <td><strong>Сумма:</strong></td>
-                        <td>${subtotal.toFixed(2)} руб.</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Сумма:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">${subtotal.toFixed(2)} руб.</td>
                     </tr>
                     <tr>
-                        <td><strong>Скидка:</strong></td>
-                        <td>${discount}% (${discountAmount.toFixed(2)} руб.)</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Скидка:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">${discount}% (${discountAmount.toFixed(2)} руб.)</td>
                     </tr>
-                    <tr>
-                        <td><strong>ИТОГО К ОПЛАТЕ:</strong></td>
-                        <td><strong>${finalTotal.toFixed(2)} руб.</strong></td>
+                    <tr style="background: #f0f0f0;">
+                        <td style="padding: 10px;"><strong>ИТОГО К ОПЛАТЕ:</strong></td>
+                        <td style="padding: 10px; text-align: right; font-size: 18px;"><strong>${finalTotal.toFixed(2)} руб.</strong></td>
                     </tr>
                 </table>
             </div>
             
-            <div class="pdf-payment">
-                <h4>Условия оплаты:</h4>
-                <p>${paymentTerms.replace(/\n/g, '<br>')}</p>
+            <div class="pdf-payment" style="margin-bottom: 40px; padding: 20px; background: #f5f5f5; border-radius: 5px;">
+                <h4 style="color: #4f46e5; margin-bottom: 10px;">Условия оплаты:</h4>
+                <p style="white-space: pre-line; margin-bottom: 20px;">${paymentTerms}</p>
                 
-                <h4>Гарантия:</h4>
+                <h4 style="color: #4f46e5; margin-bottom: 10px;">Гарантия:</h4>
                 <p>${warranty}</p>
             </div>
             
-            <div class="pdf-signatures">
-                <div class="pdf-signature">
-                    <div class="signature-line"></div>
-                    <p>Исполнитель</p>
+            <div class="pdf-signatures" style="display: flex; justify-content: space-between; margin-top: 60px;">
+                <div class="pdf-signature" style="width: 200px;">
+                    <div style="border-bottom: 1px solid #333; height: 1px; margin-bottom: 5px;"></div>
+                    <p style="text-align: center; margin-top: 5px;">Исполнитель</p>
                 </div>
-                <div class="pdf-signature">
-                    <div class="signature-line"></div>
-                    <p>Заказчик</p>
+                <div class="pdf-signature" style="width: 200px;">
+                    <div style="border-bottom: 1px solid #333; height: 1px; margin-bottom: 5px;"></div>
+                    <p style="text-align: center; margin-top: 5px;">Заказчик</p>
                 </div>
             </div>
             
-            <div class="pdf-footer">
+            <div class="pdf-footer" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; font-size: 14px;">
                 <p>${company.name} - ${company.fullName} | ${company.address || ''} | ${company.phone || ''}</p>
             </div>
         </div>
