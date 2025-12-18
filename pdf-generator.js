@@ -1,3 +1,4 @@
+// PDF Generator для создания коммерческих предложений
 import { jsPDF } from 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
 import 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js';
 
@@ -10,7 +11,7 @@ class PDFGenerator {
         this.currentY = 0;
     }
 
-    async generateEstimatePDF(estimate) {
+    async generateEstimatePDF(estimate, companyData = null) {
         // Создаем новый PDF документ
         this.doc = new jsPDF({
             orientation: 'portrait',
@@ -19,7 +20,7 @@ class PDFGenerator {
         });
 
         // Добавляем заголовок
-        this.addHeader(estimate);
+        this.addHeader(estimate, companyData);
         
         // Добавляем информацию о клиенте
         this.addClientInfo(estimate);
@@ -31,7 +32,7 @@ class PDFGenerator {
         this.addTotals(estimate);
         
         // Добавляем условия оплаты
-        this.addPaymentTerms(estimate);
+        this.addPaymentTerms(estimate, companyData);
         
         // Добавляем подписи
         this.addSignatures();
@@ -42,29 +43,58 @@ class PDFGenerator {
         return this.doc;
     }
 
-    addHeader(estimate) {
+    addHeader(estimate, companyData) {
+        // Используем данные компании или значения по умолчанию
+        const company = companyData?.company || {
+            name: 'PotolokForLife',
+            fullName: 'Натяжные потолки на всю жизнь',
+            address: 'Московская область, г. Пушкино',
+            phone: '8(977)531-10-99',
+            additionalPhone: '8(977)709-38-43',
+            email: 'potolokforlife@yandex.ru'
+        };
+
         // Логотип компании (можно заменить на реальное изображение)
         this.doc.setFontSize(20);
         this.doc.setFont('helvetica', 'bold');
-        this.doc.text('PotolokForLife', this.margin, 15);
+        this.doc.text(company.name, this.margin, 15);
         
         this.doc.setFontSize(12);
         this.doc.setFont('helvetica', 'normal');
-        this.doc.text('Натяжные потолки на всю жизнь', this.margin, 22);
-        this.doc.text('Пушкино', this.margin, 27);
-        this.doc.text('8(977)531-10-99, 8(977)709-38-43', this.margin, 32);
+        this.doc.text(company.fullName, this.margin, 22);
+        
+        if (company.address) {
+            this.doc.text(company.address, this.margin, 27);
+        }
+        
+        let contactY = 32;
+        if (company.phone) {
+            this.doc.text(`Тел: ${company.phone}`, this.margin, contactY);
+            contactY += 5;
+        }
+        
+        if (company.additionalPhone) {
+            this.doc.text(`Доп. тел: ${company.additionalPhone}`, this.margin, contactY);
+            contactY += 5;
+        }
+        
+        if (company.email) {
+            this.doc.text(`Email: ${company.email}`, this.margin, contactY);
+        }
         
         // Заголовок документа
         this.doc.setFontSize(16);
         this.doc.setFont('helvetica', 'bold');
-        this.doc.text('КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ', this.pageWidth / 2, 45, { align: 'center' });
+        this.doc.text('КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ', this.pageWidth / 2, 50, { align: 'center' });
         
         this.doc.setFontSize(12);
         this.doc.setFont('helvetica', 'normal');
-        this.doc.text(`№ ${estimate.id}`, this.pageWidth / 2, 52, { align: 'center' });
-        this.doc.text(`от ${new Date(estimate.date).toLocaleDateString('ru-RU')}`, this.pageWidth / 2, 57, { align: 'center' });
+        this.doc.text(`№ ${estimate.id}`, this.pageWidth / 2, 57, { align: 'center' });
         
-        this.currentY = 65;
+        const date = estimate.date ? new Date(estimate.date).toLocaleDateString('ru-RU') : new Date().toLocaleDateString('ru-RU');
+        this.doc.text(`от ${date}`, this.pageWidth / 2, 62, { align: 'center' });
+        
+        this.currentY = 70;
     }
 
     addClientInfo(estimate) {
@@ -74,26 +104,33 @@ class PDFGenerator {
         
         this.doc.setFont('helvetica', 'normal');
         this.currentY += 7;
-        this.doc.text(`Объект: ${estimate.object}`, this.margin, this.currentY);
         
-        this.currentY += 7;
-        this.doc.text(`Адрес: ${estimate.address}`, this.margin, this.currentY);
+        if (estimate.object) {
+            this.doc.text(`Объект: ${estimate.object}`, this.margin, this.currentY);
+            this.currentY += 7;
+        }
+        
+        if (estimate.address) {
+            this.doc.text(`Адрес: ${estimate.address}`, this.margin, this.currentY);
+            this.currentY += 7;
+        }
         
         if (estimate.rooms) {
-            this.currentY += 7;
             this.doc.text(`Количество помещений: ${estimate.rooms}`, this.margin, this.currentY);
-        }
-        
-        if (estimate.area || estimate.perimeter || estimate.height) {
             this.currentY += 7;
-            let metrics = [];
-            if (estimate.area) metrics.push(`Площадь: ${estimate.area} м²`);
-            if (estimate.perimeter) metrics.push(`Периметр: ${estimate.perimeter} м`);
-            if (estimate.height) metrics.push(`Высота: ${estimate.height} м`);
-            this.doc.text(`Параметры: ${metrics.join(', ')}`, this.margin, this.currentY);
         }
         
-        this.currentY += 15;
+        const metrics = [];
+        if (estimate.area) metrics.push(`Площадь: ${estimate.area} м²`);
+        if (estimate.perimeter) metrics.push(`Периметр: ${estimate.perimeter} м`);
+        if (estimate.height) metrics.push(`Высота: ${estimate.height} м`);
+        
+        if (metrics.length > 0) {
+            this.doc.text(`Параметры: ${metrics.join(', ')}`, this.margin, this.currentY);
+            this.currentY += 7;
+        }
+        
+        this.currentY += 10;
     }
 
     addItemsTable(estimate) {
@@ -111,9 +148,9 @@ class PDFGenerator {
             index + 1,
             item.name,
             item.unit,
-            item.quantity.toFixed(2),
-            this.formatCurrency(item.price),
-            this.formatCurrency(item.quantity * item.price)
+            (item.quantity || 0).toFixed(2),
+            this.formatCurrency(item.price || 0),
+            this.formatCurrency((item.quantity || 0) * (item.price || 0))
         ]);
         
         // Добавляем заголовок таблицы
@@ -193,7 +230,7 @@ class PDFGenerator {
         this.currentY += 20;
     }
 
-    addPaymentTerms(estimate) {
+    addPaymentTerms(estimate, companyData) {
         this.doc.setFontSize(11);
         this.doc.setFont('helvetica', 'bold');
         this.doc.text('Условия оплаты:', this.margin, this.currentY);
@@ -202,14 +239,25 @@ class PDFGenerator {
         this.doc.setFont('helvetica', 'normal');
         
         const paymentTerms = estimate.paymentDetails || 
+            (companyData?.payment?.defaultTerms || 
             `1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
 2. Окончательный расчет 50% в день завершения всех работ.
-Оплата за материалы производится 100% до начала выполнения работ.`;
+Оплата за материалы производится 100% до начала выполнения работ.`);
         
         const lines = this.doc.splitTextToSize(paymentTerms, this.pageWidth - 2 * this.margin);
         this.doc.text(lines, this.margin, this.currentY);
         
-        this.currentY += lines.length * 7 + 10;
+        this.currentY += lines.length * 7 + 5;
+        
+        // Гарантия
+        const warranty = companyData?.payment?.warranty || 'Гарантия 5 лет на материалы и работы';
+        this.doc.setFont('helvetica', 'bold');
+        this.doc.text('Гарантия:', this.margin, this.currentY);
+        this.currentY += 7;
+        this.doc.setFont('helvetica', 'normal');
+        this.doc.text(warranty, this.margin, this.currentY);
+        
+        this.currentY += 15;
     }
 
     addSignatures() {
@@ -249,28 +297,49 @@ class PDFGenerator {
 }
 
 // Функция для генерации HTML предпросмотра
-export function generateEstimateHTML(estimate) {
-    const date = new Date(estimate.date).toLocaleDateString('ru-RU');
+export function generateEstimateHTML(estimate, companyData = null) {
+    const date = estimate.date ? new Date(estimate.date).toLocaleDateString('ru-RU') : new Date().toLocaleDateString('ru-RU');
     const items = estimate.items || [];
     const subtotal = estimate.total || 0;
     const discount = estimate.discount || 0;
     const discountAmount = subtotal * (discount / 100);
     const finalTotal = subtotal - discountAmount;
     
+    // Данные компании
+    const company = companyData?.company || {
+        name: 'PotolokForLife',
+        fullName: 'Натяжные потолки на всю жизнь',
+        address: 'Московская область, г. Пушкино',
+        phone: '8(977)531-10-99',
+        additionalPhone: '8(977)709-38-43',
+        email: 'potolokforlife@yandex.ru'
+    };
+    
+    const paymentTerms = estimate.paymentDetails || 
+        (companyData?.payment?.defaultTerms || 
+        `1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
+2. Окончательный расчет 50% в день завершения всех работ.
+Оплата за материалы производится 100% до начала выполнения работ.`);
+    
+    const warranty = companyData?.payment?.warranty || 'Гарантия 5 лет на материалы и работы';
+    
     return `
         <div class="pdf-preview">
             <div class="pdf-header">
-                <h1>PotolokForLife</h1>
-                <h2>Натяжные потолки на всю жизнь</h2>
-                <p>Пушкино | 8(977)531-10-99, 8(977)709-38-43</p>
+                <h1>${company.name}</h1>
+                <h2>${company.fullName}</h2>
+                ${company.address ? `<p>${company.address}</p>` : ''}
+                ${company.phone ? `<p>Тел: ${company.phone}</p>` : ''}
+                ${company.additionalPhone ? `<p>Доп. тел: ${company.additionalPhone}</p>` : ''}
+                ${company.email ? `<p>Email: ${company.email}</p>` : ''}
                 <h3>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</h3>
                 <p>№ ${estimate.id} от ${date}</p>
             </div>
             
             <div class="pdf-client-info">
                 <h4>Клиент:</h4>
-                <p><strong>Объект:</strong> ${estimate.object}</p>
-                <p><strong>Адрес:</strong> ${estimate.address}</p>
+                ${estimate.object ? `<p><strong>Объект:</strong> ${estimate.object}</p>` : ''}
+                ${estimate.address ? `<p><strong>Адрес:</strong> ${estimate.address}</p>` : ''}
                 ${estimate.rooms ? `<p><strong>Помещений:</strong> ${estimate.rooms}</p>` : ''}
                 ${estimate.area || estimate.perimeter || estimate.height ? 
                     `<p><strong>Параметры:</strong> ${[
@@ -299,9 +368,9 @@ export function generateEstimateHTML(estimate) {
                                 <td>${index + 1}</td>
                                 <td>${item.name}</td>
                                 <td>${item.unit}</td>
-                                <td>${item.quantity.toFixed(2)}</td>
-                                <td>${item.price.toFixed(2)}</td>
-                                <td>${(item.quantity * item.price).toFixed(2)}</td>
+                                <td>${(item.quantity || 0).toFixed(2)}</td>
+                                <td>${(item.price || 0).toFixed(2)}</td>
+                                <td>${((item.quantity || 0) * (item.price || 0)).toFixed(2)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -327,10 +396,10 @@ export function generateEstimateHTML(estimate) {
             
             <div class="pdf-payment">
                 <h4>Условия оплаты:</h4>
-                <p>${(estimate.paymentDetails || 
-                    `1. Предоплата 50% не позднее 3-х дней до планируемой даты выполнения монтажа 1-го этапа.
-2. Окончательный расчет 50% в день завершения всех работ.
-Оплата за материалы производится 100% до начала выполнения работ.`).replace(/\n/g, '<br>')}</p>
+                <p>${paymentTerms.replace(/\n/g, '<br>')}</p>
+                
+                <h4>Гарантия:</h4>
+                <p>${warranty}</p>
             </div>
             
             <div class="pdf-signatures">
@@ -345,14 +414,14 @@ export function generateEstimateHTML(estimate) {
             </div>
             
             <div class="pdf-footer">
-                <p>PotolokForLife - Натяжные потолки на всю жизнь | Пушкино | 8(977)531-10-99</p>
+                <p>${company.name} - ${company.fullName} | ${company.address || ''} | ${company.phone || ''}</p>
             </div>
         </div>
     `;
 }
 
 // Основной экспорт
-export async function generateEstimatePDF(estimate) {
+export async function generateEstimatePDF(estimate, companyData = null) {
     const generator = new PDFGenerator();
-    return await generator.generateEstimatePDF(estimate);
+    return await generator.generateEstimatePDF(estimate, companyData);
 }
