@@ -27,17 +27,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
-    <!-- Приветственный экран -->
-    <div id="splash-screen" class="splash-screen">
-        <!-- Контент splash-screen -->
-    </div>
-
-    <!-- Основное приложение -->
-    <div id="app" class="app-container" style="display: none;">
-        <!-- Основное содержимое приложения -->
-    </div>
-
-    <!-- Модальные окна и уведомления -->
+    <div id="splash-screen" class="splash-screen"></div>
+    <div id="app" class="app-container" style="display: none;"></div>
     <div id="modal-overlay" class="modal-overlay"></div>
 
     <!-- Скрипты -->
@@ -48,7 +39,7 @@
     <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js')
+            navigator.serviceWorker.register('sw.js') // путь относительно корня репозитория
                 .then(reg => console.log('Service Worker зарегистрирован', reg))
                 .catch(err => console.error('Ошибка регистрации SW:', err));
         });
