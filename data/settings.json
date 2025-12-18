@@ -1,0 +1,47 @@
+{
+  "app": {
+    "name": "Настройщик смет",
+    "version": "1.0.0",
+    "theme": "light",
+    "language": "ru",
+    "currency": "RUB",
+    "currencySymbol": "₽",
+    "dateFormat": "DD.MM.YYYY",
+    "decimalSeparator": ",",
+    "thousandsSeparator": " "
+  },
+  "estimates": {
+    "defaultStatus": "draft",
+    "autoSave": true,
+    "autoSaveInterval": 30,
+    "numbering": {
+      "prefix": "EST",
+      "startFrom": 1,
+      "nextNumber": 1
+    },
+    "defaultObject": "Квартира",
+    "defaultNotes": ""
+  },
+  "prices": {
+    "defaultMarkup": 35,
+    "roundPrices": true,
+    "roundTo": 10,
+    "vatIncluded": false,
+    "vatRate": 20
+  },
+  "pdf": {
+    "title": "Коммерческое предложение",
+    "footer": "PotolokForLife - Натяжные потолки на всю жизнь",
+    "includeLogo": true,
+    "includeBankDetails": true,
+    "includeWarranty": true,
+    "filenamePattern": "Смета_{number}_{date}"
+  },
+  "backup": {
+    "autoBackup": true,
+    "backupInterval": 24,
+    "maxBackups": 30,
+    "cloudSync": false,
+    "lastBackup": null
+  }
+}
