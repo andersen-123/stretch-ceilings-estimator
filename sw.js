@@ -1,26 +1,86 @@
-const CACHE_NAME = 'estimator-v1';
+// === sw.js - Исправленная версия ===
+const CACHE_NAME = 'ceiling-estimator-v2';
 const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  './pdf-generator.js',
-  './icons/icon-192.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+    './',
+    './index.html',
+    './manifest.json',
+    './style.css',
+    './app.js',
+    './pdf-generator.js',
+    './icons/icon-192.png',
+    './icons/icon-512.png'
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(STATIC_ASSETS))
-  );
+// Установка и кэширование
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then((cache) => {
+                console.log('Кэширование статических ресурсов');
+                return cache.addAll(STATIC_ASSETS);
+            })
+            .catch((error) => {
+                console.error('Ошибка кэширования:', error);
+            })
+    );
+    // Активация без ожидания
+    self.skipWaiting();
 });
 
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
-  );
+// Активация и очистка старых кэшей
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    if (cacheName !== CACHE_NAME) {
+                        console.log('Удаление старого кэша:', cacheName);
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        }).then(() => {
+            // Взять управление всеми клиентами
+            return self.clients.claim();
+        })
+    );
+});
+
+// Обработка запросов
+self.addEventListener('fetch', (event) => {
+    // Пропускаем запросы к CDN и внешним ресурсам
+    if (event.request.url.includes('cdnjs.cloudflare.com')) {
+        return;
+    }
+    
+    // Для статических файлов используем кэш-первым
+    if (event.request.url.includes(location.origin)) {
+        event.respondWith(
+            caches.match(event.request)
+                .then((cachedResponse) => {
+                    if (cachedResponse) {
+                        return cachedResponse;
+                    }
+                    
+                    return fetch(event.request)
+                        .then((response) => {
+                            // Кэшируем только успешные ответы
+                            if (response.status === 200) {
+                                const responseClone = response.clone();
+                                caches.open(CACHE_NAME)
+                                    .then((cache) => {
+                                        cache.put(event.request, responseClone);
+                                    });
+                            }
+                            return response;
+                        })
+                        .catch(() => {
+                            // Fallback для страниц
+                            if (event.request.mode === 'navigate') {
+                                return caches.match('./index.html');
+                            }
+                        });
+                })
+        );
+    }
 });
