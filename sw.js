@@ -1,5 +1,5 @@
 // Версия кэша
-const CACHE_VERSION = 'v1.4.0';
+const CACHE_VERSION = 'v2.0.0';
 const CACHE_NAME = `estimator-cache-${CACHE_VERSION}`;
 
 // Ресурсы для кэширования при установке
@@ -10,6 +10,10 @@ const PRECACHE_ASSETS = [
   '/app.js',
   '/pdf-generator.js',
   '/manifest.json',
+  '/data/default-templates.json',
+  '/data/default-items.json',
+  '/data/company-info.json',
+  '/data/settings.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -68,6 +72,28 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Для данных из папки data используем сеть, затем кэш
+  if (event.request.url.includes('/data/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Кэшируем свежий ответ
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => {
+              cache.put(event.request, responseClone);
+            });
+          return response;
+        })
+        .catch(() => {
+          // Если нет сети, возвращаем из кэша
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // Для остальных ресурсов: Cache First
   event.respondWith(
     caches.match(event.request)
       .then(cachedResponse => {
@@ -184,20 +210,23 @@ self.addEventListener('notificationclick', event => {
 
 // Функция синхронизации данных
 async function syncData() {
-  // Здесь можно добавить синхронизацию с облаком
-  // Например, с Google Sheets или собственным API
   console.log('[Service Worker] Синхронизация данных...');
   
   try {
-    // Получаем данные из IndexedDB
-    const db = await openDB();
-    const estimates = await getAllFromStore(db, 'estimates');
+    // Здесь можно добавить синхронизацию с облачным хранилищем
+    // Например, отправка данных на сервер или синхронизация между устройствами
     
-    // Отправляем на сервер (пример)
-    // await fetch('/api/sync', {
-    //   method: 'POST',
-    //   body: JSON.stringify(estimates)
-    // });
+    // Пока просто логируем
+    const allClients = await clients.matchAll();
+    console.log('[Service Worker] Клиенты:', allClients.length);
+    
+    // Отправляем сообщение всем клиентам о синхронизации
+    allClients.forEach(client => {
+      client.postMessage({
+        type: 'SYNC_COMPLETE',
+        timestamp: new Date().toISOString()
+      });
+    });
     
     console.log('[Service Worker] Данные синхронизированы');
   } catch (error) {
@@ -205,43 +234,9 @@ async function syncData() {
   }
 }
 
-// Вспомогательные функции для IndexedDB
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('EstimatorDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = event => {
-      const db = event.target.result;
-      
-      // Создаем хранилища
-      if (!db.objectStoreNames.contains('estimates')) {
-        const store = db.createObjectStore('estimates', { keyPath: 'id' });
-        store.createIndex('date', 'date', { unique: false });
-      }
-      
-      if (!db.objectStoreNames.contains('templates')) {
-        const store = db.createObjectStore('templates', { keyPath: 'id' });
-        store.createIndex('category', 'category', { unique: false });
-      }
-      
-      if (!db.objectStoreNames.contains('items')) {
-        const store = db.createObjectStore('items', { keyPath: 'id' });
-        store.createIndex('category', 'category', { unique: false });
-      }
-    };
-  });
-}
-
-function getAllFromStore(db, storeName) {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.getAll();
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
-}
+// Обработка сообщений от основного потока
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
