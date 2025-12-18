@@ -2,48 +2,36 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- Исправлен viewport для лучшей доступности и совместимости -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- PWA-метатеги для iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Смета потолков">
-    <!-- Предзагрузка критических ресурсов для ускорения загрузки -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
 
     <title>Конструктор смет | Натяжные потолки</title>
     <meta name="description" content="Профессиональное создание и управление сметами для натяжных потолков. Работает офлайн.">
-    <!-- Ключевые слова для SEO и обнаружения PWA -->
     <meta name="keywords" content="натяжные потолки, смета, калькулятор, PWA, офлайн">
 
     <!-- PWA Метаданные -->
-    <!-- Манифест ДОЛЖЕН существовать и быть валидным -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#4f46e5">
-    <!-- Цвет для мобильной панели навигации Safari -->
     <meta name="apple-mobile-web-app-status-bar-style" content="#4f46e5">
-    <!-- Fallback иконка -->
-    <link rel="icon" type="image/png" href="icons/favicon.ico">
+    <link rel="icon" type="image/png" href="./icons/favicon.ico">
 
-    <!-- Иконки для различных платформ -->
-    <!-- Стандартная иконка -->
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
-    <!-- Иконка для Apple -->
-    <link rel="apple-touch-icon" href="icons/icon-180.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
-    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
-    <!-- Иконка для Windows -->
-    <meta name="msapplication-TileImage" content="icons/icon-144.png">
+    <!-- Иконки -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/icon-16.png">
+    <link rel="apple-touch-icon" href="./icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="./icons/icon-167.png">
+    <meta name="msapplication-TileImage" content="./icons/icon-144.png">
     <meta name="msapplication-TileColor" content="#4f46e5">
 
-    <!-- Основные стили -->
-    <link rel="stylesheet" href="style.css">
-    <!-- Стили для загрузочного экрана (опционально) -->
+    <!-- Стили -->
+    <link rel="stylesheet" href="./style.css">
     <style>
-        /* Базовые стили для splash-screen, если он не описан в style.css */
         .splash-screen {
             position: fixed;
             top: 0;
@@ -64,38 +52,29 @@
     </style>
 </head>
 <body>
-    <!-- Экран-заставка (Splash Screen) -->
     <div id="splash-screen" class="splash-screen">
-        <!-- Логотип или индикатор загрузки. Можно добавить изображение. -->
         <div style="color: white; font-size: 1.5rem;">Загрузка конструктора смет...</div>
     </div>
 
-    <!-- Основной контейнер приложения -->
     <div id="app" class="app-container"></div>
-
-    <!-- Оверлей для модальных окон -->
     <div id="modal-overlay" class="modal-overlay"></div>
 
-    <!-- Зависимости из CDN -->
+    <!-- CDN библиотеки -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <!-- Основные скрипты приложения -->
-    <script src="app.js" type="module"></script>
-    <script src="pdf-generator.js" type="module"></script>
+    <!-- Скрипты приложения -->
+    <script src="./app.js" type="module"></script>
+    <script src="./pdf-generator.js" type="module"></script>
 
     <!-- Регистрация Service Worker -->
     <script>
         if ('serviceWorker' in navigator) {
-            // Отложенная регистрация после полной загрузки страницы
             window.addEventListener('load', function() {
-                // Важно: путь к sw.js относительно корня сайта/репозитория
                 navigator.serviceWorker.register('./sw.js')
                     .then(function(registration) {
                         console.log('✅ ServiceWorker успешно зарегистрирован с областью: ', registration.scope);
-                        // Опционально: проверка обновлений SW
-                        registration.update();
                     })
                     .catch(function(error) {
                         console.error('❌ Ошибка регистрации ServiceWorker: ', error);
@@ -105,21 +84,17 @@
             console.warn('⚠️ Service Workers не поддерживаются вашим браузером.');
         }
 
-        // Управление экраном-заставкой
         window.addEventListener('DOMContentLoaded', () => {
             const splashScreen = document.getElementById('splash-screen');
-            // Скрываем splash-screen через короткую задержку или после инициализации app.js
             setTimeout(() => {
                 if(splashScreen) {
                     splashScreen.classList.add('hidden');
-                    // Удаляем элемент из DOM после анимации
                     setTimeout(() => splashScreen.remove(), 500);
                 }
-            }, 800); // Задержка в миллисекундах
+            }, 800);
         });
     </script>
 
-    <!-- Fallback для отключенного JavaScript -->
     <noscript>
         <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 99999; display: flex; justify-content: center; align-items: center; text-align: center; padding: 20px;">
             <div>
