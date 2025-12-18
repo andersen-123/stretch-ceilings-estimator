@@ -1,142 +1,25 @@
 {
-  "name": "Настройщик смет - Натяжные потолки",
+  "name": "Настройщик смет",
   "short_name": "Сметы",
-  "description": "Создание и управление сметами на натяжные потолки. Работает оффлайн.",
+  "description": "Создание смет на натяжные потолки",
   "start_url": "/",
   "scope": "/",
-  "id": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "lang": "ru",
-  "dir": "ltr",
-  
   "icons": [
     {
-      "src": "icons/icon-72x72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icons/icon-96x96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-192x192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "icons/icon-512x512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    }
-  ],
-  
-  "screenshots": [
-    {
-      "src": "screenshots/mobile-1.png",
-      "sizes": "375x667",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Главный экран смет"
-    },
-    {
-      "src": "screenshots/mobile-2.png",
-      "sizes": "375x667",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Создание сметы"
-    },
-    {
-      "src": "screenshots/desktop-1.png",
-      "sizes": "1920x1080",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Рабочий стол - список смет"
-    }
-  ],
-  
-  "categories": ["business", "productivity", "finance"],
-  
-  "shortcuts": [
-    {
-      "name": "Новая смета",
-      "short_name": "Новая",
-      "description": "Создать новую смету",
-      "url": "/#create",
-      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Список смет",
-      "short_name": "Сметы",
-      "description": "Просмотр всех смет",
-      "url": "/#estimates",
-      "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
-    }
-  ],
-  
-  "file_handlers": [
-    {
-      "action": "/import",
-      "accept": {
-        "application/json": [".json"],
-        "text/csv": [".csv"]
-      }
-    }
-  ],
-  
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "name",
-      "text": "description",
-      "url": "link",
-      "files": [
-        {
-          "name": "estimates",
-          "accept": ["application/json", "text/csv"]
-        }
-      ]
-    }
-  },
-  
-  "protocol_handlers": [
-    {
-      "protocol": "web+estimator",
-      "url": "/import?url=%s"
     }
   ]
 }
